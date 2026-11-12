@@ -49,7 +49,7 @@ TEST(Engine_preDelayOffsetsOnset) {
 }
 
 TEST(Engine_sustainThenRelease) {
-  Rig r; r.p.sustainSec = 2; r.p.releaseSec = 1; r.e.setParams(r.p); r.e.reset();
+  Rig r; ei::setSustainTail(r.p, 2, 1); r.e.setParams(r.p); r.e.reset();
   auto out = r.run(noiseBurst(r.sr, 0.1, 4.5));
   float a = levelAt(out, r.sr, 0.5, 0.2), b = levelAt(out, r.sr, 1.5, 0.2), c = levelAt(out, r.sr, 4.0, 0.2);
   CHECK(a > -60.0f);
@@ -59,9 +59,9 @@ TEST(Engine_sustainThenRelease) {
 
 TEST(Engine_gatedReverbCuts) {
   auto in = noiseBurst(48000, 0.1, 1.0);
-  Rig open; open.p.releaseSec = 4; open.e.setParams(open.p); open.e.reset();
+  Rig open; ei::setExponentialTail(open.p, 4); open.e.setParams(open.p); open.e.reset();
   auto ungated = open.run(in);
-  Rig g; g.p.releaseSec = 4; g.p.gateOn = true; g.p.gateSource = ei::EngineParams::GateSource::Dry;
+  Rig g; ei::setExponentialTail(g.p, 4); g.p.gateOn = true; g.p.gateSource = ei::EngineParams::GateSource::Dry;
   g.p.gateThresholdDb = -30; g.p.gateHoldMs = 100; g.p.gateReleaseMs = 50; g.p.gateRangeDb = -80; g.e.setParams(g.p); g.e.reset();
   auto gated = g.run(in);
   float peak = -200; for (double t = 0.0; t < 0.3; t += 0.02) peak = std::fmax(peak, levelAt(ungated, 48000, t, 0.02));
@@ -71,7 +71,7 @@ TEST(Engine_gatedReverbCuts) {
 }
 
 TEST(Engine_gateFromWetFollowsTail) {
-  Rig g; g.p.releaseSec = 1; g.p.gateOn = true; g.p.gateSource = ei::EngineParams::GateSource::Wet;
+  Rig g; ei::setExponentialTail(g.p, 1); g.p.gateOn = true; g.p.gateSource = ei::EngineParams::GateSource::Wet;
   g.p.gateThresholdDb = -20; g.p.gateHoldMs = 0; g.p.gateReleaseMs = 20; g.e.setParams(g.p); g.e.reset();
   auto out = g.run(noiseBurst(48000, 0.1, 3.0));
   CHECK(levelAt(out, 48000, 0.1) > -40.0f);
@@ -123,7 +123,7 @@ TEST(Engine_sampleRates) {
   ei::ReverbEngine e;
   for (double sr : {44100.0, 96000.0, 192000.0, 44100.0}) {
     e.prepare(sr, 512);
-    ei::EngineParams p; p.lfoDepth = 0; p.mix = 1; p.releaseSec = 2; p.damping = 0; p.preDelayMs = 100; e.setParams(p); e.reset();
+    ei::EngineParams p; p.lfoDepth = 0; p.mix = 1; ei::setExponentialTail(p, 2); p.damping = 0; p.preDelayMs = 100; e.setParams(p); e.reset();
     std::vector<float> l(size_t(2.2 * sr), 0.0f); l[0] = 1.0f; auto r = l;
     for (size_t o = 0; o < l.size(); o += 512) { int n = int(std::min<size_t>(512, l.size() - o)); e.process(l.data() + o, r.data() + o, n); }
     float early = 0; for (int i = 0; i < int(0.099 * sr); ++i) early = std::fmax(early, std::fabs(l[i]));
@@ -140,7 +140,7 @@ TEST(Engine_automationSweepsAreSafe) {
   std::vector<float> l(256), r(256);
   for (int b = 0; b < 20 * 48000 / 256; ++b) {
     p.size = 1 + 999 * u(rng); p.diffusion = u(rng); p.damping = s(rng); p.pitch = 12 * s(rng); p.pitchMix = u(rng); p.width = 2 * u(rng);
-    p.freeze = u(rng) < 0.05f; p.preDelayMs = 500 * u(rng); p.sustainSec = 10 * u(rng) * u(rng); p.releaseSec = 0.1f + 60 * u(rng); p.releaseInfinite = u(rng) < 0.2f;
+    p.freeze = u(rng) < 0.05f; p.preDelayMs = 500 * u(rng); { float t = 0; for (auto& pt : p.tail) { t += 20 * u(rng) * u(rng); pt.time = u(rng) < 0.1f ? 60 * u(rng) : t; pt.levelDb = -60 + 72 * u(rng); } }   // includes out-of-order points
     for (auto& band : p.eq) { band.on = u(rng) < 0.8f; band.freq = 20 * std::pow(1000.0f, u(rng)); band.gainDb = 18 * s(rng); band.q = 0.1f + 9.9f * u(rng); }
     p.eqBand6HighCut = u(rng) < 0.5f;
     p.lfoMode = u(rng) < 0.5f ? ei::Lfo::Mode::Auto : ei::Lfo::Mode::Manual; p.lfoShape = ei::Lfo::Shape(int(u(rng) * 4.99f));
@@ -164,7 +164,7 @@ TEST(Engine_blockSizeInvariant) {
   auto make = [&](int mode) {
     ei::ReverbEngine e; e.prepare(48000, 8192);
     ei::EngineParams p; p.mix = 0.5f; p.lfoMode = ei::Lfo::Mode::Manual; p.lfoDepth = 0.5f; p.lfoRateHz = 2; p.reverseOn = true; p.reverseWindowMs = 120;
-    p.gateOn = true; p.sustainSec = 0.3f; p.pitch = 7; p.pitchMix = 0.3f; p.eq[3].gainDb = 6;
+    p.gateOn = true; ei::setSustainTail(p, 0.3f, 4); p.pitch = 7; p.pitchMix = 0.3f; p.eq[3].gainDb = 6;
     e.setParams(p); e.reset();
     std::vector<float> l(in), r(in); std::mt19937 rng(5);
     for (size_t o = 0; o < l.size();) {
@@ -191,7 +191,7 @@ TEST(Engine_metersReportActivity) {
 }
 
 TEST(Engine_reverseReenableIsSilent) {
-  Rig r; r.p.reverseOn = true; r.p.reverseWindowMs = 200; r.p.releaseSec = 0.3f; r.e.setParams(r.p); r.e.reset();
+  Rig r; r.p.reverseOn = true; r.p.reverseWindowMs = 200; ei::setExponentialTail(r.p, 0.3f); r.e.setParams(r.p); r.e.reset();
   r.run(noiseBurst(r.sr, 1.0, 1.0));
   r.p.reverseOn = false; r.run(std::vector<float>(size_t(6 * r.sr), 0.0f));
   r.p.reverseOn = true;
@@ -203,7 +203,7 @@ TEST(Engine_reverseReenableIsSilent) {
 TEST(Engine_sustainDoesNotPileUpUnderContinuousInput) {
   auto in = noiseBurst(48000, 6.0, 6.0, 3, 0.1f);
   Rig plain; plain.e.setParams(plain.p); plain.e.reset();
-  Rig sus; sus.p.sustainSec = 2; sus.e.setParams(sus.p); sus.e.reset();
+  Rig sus; ei::setSustainTail(sus.p, 2, 4); sus.e.setParams(sus.p); sus.e.reset();
   auto a = plain.run(in), b = sus.run(in);
   CHECK(levelAt(b, 48000, 5.0, 0.5) < levelAt(a, 48000, 5.0, 0.5) + 1.0f);
 }
@@ -212,10 +212,10 @@ TEST(Engine_sustainWithRepeatedHitsStaysModerate) {
   std::vector<float> in(size_t(10 * 48000), 0.0f);
   std::mt19937 rng(8); std::uniform_real_distribution<float> u(-0.1f, 0.1f);
   for (int hit = 0; hit < 20; ++hit) for (int i = 0; i < 2400; ++i) in[size_t(hit * 24000 + i)] = u(rng);
-  Rig single; single.p.sustainSec = 2; single.e.setParams(single.p); single.e.reset();
+  Rig single; ei::setSustainTail(single.p, 2, 4); single.e.setParams(single.p); single.e.reset();
   std::vector<float> one(in.begin(), in.begin() + 24000);
   auto a = single.run(one);
-  Rig many; many.p.sustainSec = 2; many.e.setParams(many.p); many.e.reset();
+  Rig many; ei::setSustainTail(many.p, 2, 4); many.e.setParams(many.p); many.e.reset();
   auto b = many.run(in);
   float pa = -200, pb = -200;
   for (double t = 0.0; t < 0.45; t += 0.05) pa = std::fmax(pa, levelAt(a, 48000, t));
@@ -252,7 +252,7 @@ std::vector<float> smoothTone(double sr, double seconds, double stopAt) {
 
 // The host asks for a flush when the transport starts or the cycle jumps, while the tail may be ringing.
 TEST(Engine_flushFadesTheTailInsteadOfCuttingIt) {
-  Rig r; r.p.releaseSec = 6; r.e.setParams(r.p); r.e.reset();
+  Rig r; ei::setExponentialTail(r.p, 6); r.e.setParams(r.p); r.e.reset();
   auto in = smoothTone(r.sr, 3.0, 1.5);
   std::vector<float> out;
   for (size_t o = 0; o < in.size(); o += 512) {
@@ -291,7 +291,7 @@ TEST(Engine_lfoOffStopsModulation) {
 
 // Measured with noise: a pure tone would only show the room's resonances shifting, not clicks.
 TEST(Engine_lfoToggleDoesNotClick) {
-  Rig r; r.p.lfoMode = ei::Lfo::Mode::Manual; r.p.lfoShape = ei::Lfo::Shape::Square; r.p.lfoRateHz = 0.2f; r.p.lfoDepth = 1; r.p.releaseSec = 6;
+  Rig r; r.p.lfoMode = ei::Lfo::Mode::Manual; r.p.lfoShape = ei::Lfo::Shape::Square; r.p.lfoRateHz = 0.2f; r.p.lfoDepth = 1; ei::setExponentialTail(r.p, 6);
   r.e.setParams(r.p); r.e.reset();
   auto in = noiseBurst(r.sr, 4.0, 4.0, 13, 0.3f);
   std::vector<float> out;
@@ -317,45 +317,63 @@ TEST(Engine_attackSoftensTheOnset) {
   CHECK_NEAR(levelAt(b, 48000, 1.5, 0.3), levelAt(a, 48000, 1.5, 0.3), 3.0);
 }
 
-TEST(Engine_benderBendsTheSustain) {
-  auto in = noiseBurst(48000, 0.3, 3.0, 6, 0.02f);              // quiet, so a growing tail stays far from the limiter
-  auto change = [&](float bend) {
-    Rig r; r.p.sustainSec = 2; r.p.sustainBendDb = bend; r.p.releaseSec = 4; r.e.setParams(r.p); r.e.reset();
-    auto y = r.run(in);
-    return levelAt(y, 48000, 2.1, 0.2) - levelAt(y, 48000, 0.5, 0.2);   // 1.6 s apart, inside the sustain
-  };
-  CHECK_NEAR(change(0.0f), 0.0, 1.5);
-  CHECK_NEAR(change(-12.0f), -9.6, 3.0);
-  CHECK_NEAR(change(6.0f), 4.8, 3.0);
+// The tail must follow the curve that was drawn, segment by segment: hold, fall, hold, rise, fall.
+TEST(Engine_tailFollowsTheDrawnCurve) {
+  Rig r; r.p.damping = 0; r.p.preDelayMs = 0;
+  const ei::TailPoint pts[5] = {{1.0f, 0.0f}, {2.0f, -30.0f}, {3.0f, -30.0f}, {3.5f, -18.0f}, {5.0f, -60.0f}};
+  for (int i = 0; i < 5; ++i) r.p.tail[i] = pts[i];
+  r.e.setParams(r.p); r.e.reset();
+  auto y = r.run(noiseBurst(48000, 0.3, 6.5, 6, 0.02f));       // quiet, so the rising segment stays far from the limiter
+  const double t0 = 0.33;                                       // the source stops at 0.3 s (+ detection time)
+  auto at = [&](double t) { return levelAt(y, 48000, t0 + t, 0.1); };
+  CHECK_NEAR(at(0.85), at(0.15), 2.0);                          // 0 - 1 s: held
+  CHECK_NEAR(at(2.1), at(0.5) - 30.0, 5.0);                     // 1 - 2 s: down 30 dB
+  CHECK_NEAR(at(2.85), at(2.15), 2.5);                          // 2 - 3 s: held again
+  CHECK_NEAR(at(3.55), at(2.85) + 12.0, 5.0);                   // 3 - 3.5 s: back up 12 dB
+  CHECK(at(5.6) < at(0.5) - 50.0);                              // gone by the last point
 }
 
-TEST(Engine_curveShapesTheRelease) {
-  auto in = noiseBurst(48000, 0.3, 3.0, 7, 0.2f);
-  auto drops = [&](float curve, double at) {
-    Rig r; r.p.releaseSec = 2; r.p.releaseCurve = curve; r.p.damping = 0; r.e.setParams(r.p); r.e.reset();
-    auto y = r.run(in);
-    return levelAt(y, 48000, 0.36, 0.05) - levelAt(y, 48000, 0.36 + at, 0.05);
-  };
-  CHECK_NEAR(drops(0.0f, 0.5), 15.0, 4.0);       // plain exponential: 60 dB in 2 s
-  CHECK(drops(1.0f, 0.5) < 6.0);                 // holds on...
-  CHECK(drops(1.0f, 2.1) > 45.0);                // ...then collapses
-  CHECK(drops(-1.0f, 0.5) > 25.0);               // falls away at once...
-  CHECK(drops(-1.0f, 2.1) > 45.0);
+TEST(Engine_tailEndingAboveSilenceNeverDies) {
+  Rig r; r.p.damping = 0;
+  const ei::TailPoint pts[5] = {{0.5f, -6.0f}, {1.0f, -12.0f}, {1.5f, -16.0f}, {2.0f, -18.0f}, {2.5f, -20.0f}};
+  for (int i = 0; i < 5; ++i) r.p.tail[i] = pts[i];
+  r.e.setParams(r.p); r.e.reset();
+  auto y = r.run(noiseBurst(48000, 0.3, 12.0, 6, 0.05f));
+  CHECK_NEAR(levelAt(y, 48000, 11.0, 0.5), levelAt(y, 48000, 4.0, 0.5), 1.5);
+}
+
+TEST(Engine_defaultTailIsAFourSecondExponential) {
+  Rig r; r.p.damping = 0; r.e.setParams(r.p); r.e.reset();
+  auto y = r.run(noiseBurst(48000, 0.3, 4.0, 6, 0.2f));
+  CHECK_NEAR(levelAt(y, 48000, 1.0, 0.1) - levelAt(y, 48000, 3.0, 0.1), 30.0, 4.0);      // 15 dB per second
 }
 
 TEST(Engine_envelopeExtremesStayBounded) {
   std::mt19937 rng(17); std::uniform_real_distribution<float> u(-1, 1);
-  for (float bend : {-24.0f, 12.0f}) for (float curve : {-1.0f, 1.0f}) {
+  const ei::TailPoint shapes[3][5] = {
+      {{0.01f, 12.0f}, {10.0f, 12.0f}, {20.0f, 12.0f}, {40.0f, 12.0f}, {60.0f, 12.0f}},       // leaps up and stays there
+      {{1.0f, -60.0f}, {1.0f, 12.0f}, {1.0f, -60.0f}, {1.0f, 12.0f}, {1.0f, -60.0f}},         // vertical zig-zag
+      {{60.0f, 0.0f}, {30.0f, -60.0f}, {10.0f, 12.0f}, {0.0f, 0.0f}, {5.0f, 5.0f}}};          // out of order
+  for (auto& shape : shapes) {
     ei::ReverbEngine e; e.prepare(48000, 256);
-    ei::EngineParams p; p.mix = 1; p.sustainSec = 10; p.sustainBendDb = bend; p.releaseCurve = curve; p.attackSec = 2; p.releaseSec = 60; p.damping = 1; p.pitch = 12; p.pitchMix = 1;
+    ei::EngineParams p; p.mix = 1; p.attackSec = 2; p.damping = 1; p.pitch = 12; p.pitchMix = 1; p.density = 1;
+    for (int i = 0; i < 5; ++i) p.tail[i] = shape[i];
     e.setParams(p); e.reset();
     bool finite = true; float peak = 0; std::vector<float> l(256), r(256);
     for (int b = 0; b < 30 * 48000 / 256; ++b) {
-      const bool playing = (b / 400) % 2 == 0;                        // ~2 s on, ~2 s off: sustain and release keep retriggering
+      const bool playing = (b / 400) % 2 == 0;                        // ~2 s on, ~2 s off: the curve keeps retriggering
       for (int i = 0; i < 256; ++i) { l[i] = playing ? u(rng) : 0.0f; r[i] = l[i]; }
       e.process(l.data(), r.data(), 256);
       for (int i = 0; i < 256; ++i) { finite = finite && std::isfinite(l[i]); peak = std::fmax(peak, std::fabs(l[i])); }
     }
     CHECK(finite); CHECK(peak <= 8.0f);
   }
+}
+
+TEST(Engine_densityReachesTheNetwork) {
+  auto in = noiseBurst(48000, 0.3, 1.5, 6, 0.2f);
+  auto make = [&](float d) { Rig r; r.p.density = d; r.e.setParams(r.p); r.e.reset(); return r.run(in); };
+  auto a = make(0.5f), b = make(1.0f), c = make(0.0f);
+  double dab = 0, dac = 0; for (size_t i = 0; i < a.size(); ++i) { dab += std::fabs(a[i] - b[i]); dac += std::fabs(a[i] - c[i]); }
+  CHECK(dab / a.size() > 1e-4); CHECK(dac / a.size() > 1e-4);
 }

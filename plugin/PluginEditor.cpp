@@ -15,7 +15,7 @@ ImpossibleSpacesEditor::ImpossibleSpacesEditor(ImpossibleSpacesProcessor& p)
     : AudioProcessorEditor(&p), processor_(p), state_(p.apvts),
       envelope_(state_), eq_(state_), eqBand6Mode_(state_, ei::id::eq6HighCut, {"SHELF", "CUT"}),
       size_(state_, ei::id::size, "SIZE"), diffusion_(state_, ei::id::diffusion, "DIFFUSION"),
-      damping_(state_, ei::id::damping, "DAMPING", true), width_(state_, ei::id::width, "WIDTH"),
+      density_(state_, ei::id::density, "DENSITY"), damping_(state_, ei::id::damping, "DAMPING", true), width_(state_, ei::id::width, "WIDTH"),
       pitch_(state_, ei::id::pitch, "PITCH", true), pitchMix_(state_, ei::id::pitchMix, "PITCH MIX"),
       freeze_(state_, ei::id::freeze, ui::Toggle::Style::Box, "FREEZE"),
       lfoOn_(state_, ei::id::lfoOn, ui::Toggle::Style::Led),
@@ -35,7 +35,7 @@ ImpossibleSpacesEditor::ImpossibleSpacesEditor(ImpossibleSpacesProcessor& p)
       gateSource_(state_, ei::id::gateSource, {"DRY", "WET"}),
       mix_(state_, ei::id::mix, "MIX"), output_(state_, ei::id::output, "LEVEL", true) {
   for (juce::Component* c : std::initializer_list<juce::Component*>{
-           &envelope_, &eq_, &eqBand6Mode_, &size_, &diffusion_, &damping_, &width_, &pitch_, &pitchMix_, &freeze_,
+           &envelope_, &eq_, &eqBand6Mode_, &size_, &diffusion_, &density_, &damping_, &width_, &pitch_, &pitchMix_, &freeze_,
            &lfoOn_, &lfoMode_, &lfoShape_, &lfoTarget_, &lfoView_, &lfoRate_, &lfoDivision_, &lfoDepth_, &lfoPhase_, &lfoSync_,
            &revOn_, &revWindow_, &revDivision_, &revSync_,
            &gateOn_, &gateThreshold_, &gateRange_, &gateAttack_, &gateHold_, &gateRelease_, &gateSource_, &mix_, &output_})
@@ -55,9 +55,9 @@ void ImpossibleSpacesEditor::resized() {
 
   // Space
   const float sx[4] = {kSpace.getX() + 46.0f, kSpace.getX() + 120.0f, kSpace.getX() + 194.0f, kSpace.getX() + 268.0f};
-  size_.place(sx[0], kRow1, 20); diffusion_.place(sx[1], kRow1, 20); damping_.place(sx[2], kRow1, 20); width_.place(sx[3], kRow1, 20);
-  pitch_.place(sx[0], kRow2, 20); pitchMix_.place(sx[1], kRow2, 20);
-  freeze_.setBounds(int(sx[2]) - 26, int(kRow2) - 18, 126, 36);
+  size_.place(sx[0], kRow1, 20); diffusion_.place(sx[1], kRow1, 20); density_.place(sx[2], kRow1, 20); damping_.place(sx[3], kRow1, 20);
+  width_.place(sx[0], kRow2, 20); pitch_.place(sx[1], kRow2, 20); pitchMix_.place(sx[2], kRow2, 20);
+  freeze_.setBounds(int(sx[3]) - 32, int(kRow2) - 16, 64, 32);
 
   // LFO
   const int lx = kLfo.getX(), lw = kLfo.getWidth();

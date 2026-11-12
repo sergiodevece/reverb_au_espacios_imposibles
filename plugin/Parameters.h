@@ -8,8 +8,8 @@ namespace ei {
 
 namespace id {
 #define EI_ID(name) inline constexpr const char* name = #name
-EI_ID(size); EI_ID(diffusion); EI_ID(damping); EI_ID(pitch); EI_ID(pitchMix); EI_ID(width); EI_ID(freeze);
-EI_ID(preDelay); EI_ID(attack); EI_ID(sustain); EI_ID(bender); EI_ID(release); EI_ID(curve); EI_ID(releaseInf);
+EI_ID(size); EI_ID(diffusion); EI_ID(density); EI_ID(damping); EI_ID(pitch); EI_ID(pitchMix); EI_ID(width); EI_ID(freeze);
+EI_ID(preDelay); EI_ID(attack);
 EI_ID(eq6HighCut);
 EI_ID(lfoOn); EI_ID(lfoMode); EI_ID(lfoShape); EI_ID(lfoRate); EI_ID(lfoSync); EI_ID(lfoDivision); EI_ID(lfoDepth); EI_ID(lfoPhase); EI_ID(lfoTarget);
 EI_ID(revOn); EI_ID(revWindow); EI_ID(revSync); EI_ID(revDivision);
@@ -18,6 +18,8 @@ EI_ID(mix); EI_ID(output);
 #undef EI_ID
 // Per-band IDs: eq1On, eq1Freq, eq1Gain, eq1Q ... eq6Q (band is 1-based).
 inline juce::String eq(int band, const char* what) { return "eq" + juce::String(band) + what; }
+// Tail curve points: tail1Time, tail1Level ... tail5Level (point is 1-based).
+inline juce::String tail(int point, const char* what) { return "tail" + juce::String(point) + what; }
 }  // namespace id
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -31,8 +33,8 @@ public:
 private:
   std::atomic<float>* get(const juce::String& paramId) const;
   juce::AudioProcessorValueTreeState& state_;
-  std::atomic<float> *size, *diffusion, *damping, *pitch, *pitchMix, *width, *freeze;
-  std::atomic<float> *preDelay, *attack, *sustain, *bender, *release, *curve, *releaseInf;
+  std::atomic<float> *size, *diffusion, *density, *damping, *pitch, *pitchMix, *width, *freeze;
+  std::atomic<float> *preDelay, *attack, *tailTime[5], *tailLevel[5];
   std::atomic<float> *eqOn[6], *eqFreq[6], *eqGain[6], *eqQ[6], *eq6HighCut;
   std::atomic<float> *lfoOn, *lfoMode, *lfoShape, *lfoRate, *lfoSync, *lfoDivision, *lfoDepth, *lfoPhase, *lfoTarget;
   std::atomic<float> *revOn, *revWindow, *revSync, *revDivision;

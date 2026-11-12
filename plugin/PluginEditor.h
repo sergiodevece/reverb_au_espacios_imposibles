@@ -27,7 +27,7 @@ private:
   ui::Chips eqBand6Mode_;
 
   // Space
-  ui::Knob size_, diffusion_, damping_, width_, pitch_, pitchMix_;
+  ui::Knob size_, diffusion_, density_, damping_, width_, pitch_, pitchMix_;
   ui::Toggle freeze_;
   // LFO
   ui::Toggle lfoOn_;

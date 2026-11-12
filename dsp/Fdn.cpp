@@ -119,8 +119,7 @@ void Fdn::setDensity(float a) { if (std::isfinite(a)) densityTarget_ = std::clam
 void Fdn::setDiffusion(float a) { if (std::isfinite(a)) diffusion_ = std::clamp(a, 0.0f, 1.0f); }
 void Fdn::setWidth(float w) { if (std::isfinite(w)) width_ = std::clamp(w, 0.0f, 2.0f); }
 void Fdn::setHold(float h) { if (std::isfinite(h)) hold_ = std::clamp(h, 0.0f, 1.0f); }
-void Fdn::setHoldRate(float r) { if (std::isfinite(r)) holdRate_ = std::clamp(r, -60.0f, 240.0f); }
-void Fdn::setReleaseScale(float s) { if (std::isfinite(s)) releaseScale_ = std::clamp(s, 0.01f, 100.0f); }
+void Fdn::setDecayRate(float r) { if (std::isfinite(r)) { decayRate_ = std::clamp(r, -60.0f, 600.0f); rateMode_ = true; } }
 void Fdn::setFreeze(bool on) { freezeTarget_ = on ? 1.0f : 0.0f; }
 
 void Fdn::setRelease(float rt60, bool infinite) {
@@ -165,8 +164,8 @@ void Fdn::controlTick() {
     if (sizeSettled) apTarget = std::round(apTarget);
     apInc_[i] = (apTarget - apBase_[i]) / float(kControlInterval);
     float seconds = target / float(sr_);
-    gain_[i] = infinite_ ? 1.0f : std::pow(10.0f, -3.0f * seconds / rt60_ * releaseScale_);
-    holdGain_[i] = holdRate_ == 0.0f ? 1.0f : std::pow(10.0f, -holdRate_ * seconds / 20.0f);
+    if (rateMode_) gain_[i] = holdGain_[i] = decayRate_ == 0.0f ? 1.0f : std::pow(10.0f, -decayRate_ * seconds / 20.0f);
+    else { gain_[i] = infinite_ ? 1.0f : std::pow(10.0f, -3.0f * seconds / rt60_); holdGain_[i] = 1.0f; }
   }
   settled_ = sizeSettled;
 }
@@ -240,7 +239,7 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
       float shifted = shifters_[size_t(i >> 2)].process(y);
       y += pitchMix_ * (shifted - y);
     }
-    float g = gain_[i] + hold_ * (holdGain_[i] - gain_[i]);     // sustain: held, sinking or growing
+    float g = gain_[i] + hold_ * (holdGain_[i] - gain_[i]);     // held (only differs from gain_ without a decay rate)
     g += freeze_ * (1.0f - g);                                    // freeze: exactly lossless
     v[i] = y * g;
   }

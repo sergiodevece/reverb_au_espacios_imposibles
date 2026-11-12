@@ -35,6 +35,7 @@ Layout createParameterLayout() {
   // Space
   addFloat(l, id::size, "Size", skewed(1.0f, 1000.0f, 30.0f), d.size, "m");
   addFloat(l, id::diffusion, "Diffusion", Range(0.0f, 100.0f), d.diffusion * 100.0f, "%", 0);
+  addFloat(l, id::density, "Density", Range(0.0f, 100.0f), d.density * 100.0f, "%", 0);
   addFloat(l, id::damping, "Damping", Range(-100.0f, 100.0f), d.damping * 100.0f, "%", 0);
   addFloat(l, id::pitch, "Pitch", Range(-12.0f, 12.0f, 0.01f), d.pitch, "st", 2);
   addFloat(l, id::pitchMix, "Pitch Mix", Range(0.0f, 100.0f), d.pitchMix * 100.0f, "%", 0);
@@ -44,11 +45,11 @@ Layout createParameterLayout() {
   // Tail envelope
   addFloat(l, id::preDelay, "Pre-Delay", skewed(0.0f, 500.0f, 50.0f), d.preDelayMs, "ms");
   addFloat(l, id::attack, "Attack", skewed(0.0f, 2.0f, 0.3f), d.attackSec, "s", 2);
-  addFloat(l, id::sustain, "Sustain", skewed(0.0f, 10.0f, 1.5f), d.sustainSec, "s", 2);
-  addFloat(l, id::release, "Release", skewed(0.1f, 60.0f, 4.0f), d.releaseSec, "s", 2);
-  addBool(l, id::releaseInf, "Release Infinite", d.releaseInfinite);
-  addFloat(l, id::bender, "Sustain Bender", Range(-24.0f, 12.0f), d.sustainBendDb, "dB");
-  addFloat(l, id::curve, "Release Curve", Range(-100.0f, 100.0f), d.releaseCurve * 100.0f, "%", 0);
+  for (int n = 1; n <= 5; ++n) {
+    const juce::String name = "Tail " + juce::String(n) + " ";
+    addFloat(l, id::tail(n, "Time"), name + "Time", skewed(0.0f, 60.0f, 2.0f), d.tail[n - 1].time, "s", 2);
+    addFloat(l, id::tail(n, "Level"), name + "Level", Range(-60.0f, 12.0f), d.tail[n - 1].levelDb, "dB");
+  }
 
   // EQ
   for (int b = 1; b <= 6; ++b) {
@@ -101,13 +102,14 @@ std::atomic<float>* ParamReader::get(const juce::String& paramId) const {
 
 ParamReader::ParamReader(juce::AudioProcessorValueTreeState& state) : state_(state) {
 #define EI_GET(name) name = get(id::name)
-  EI_GET(size); EI_GET(diffusion); EI_GET(damping); EI_GET(pitch); EI_GET(pitchMix); EI_GET(width); EI_GET(freeze);
-  EI_GET(preDelay); EI_GET(attack); EI_GET(sustain); EI_GET(bender); EI_GET(release); EI_GET(curve); EI_GET(releaseInf); EI_GET(eq6HighCut);
+  EI_GET(size); EI_GET(diffusion); EI_GET(density); EI_GET(damping); EI_GET(pitch); EI_GET(pitchMix); EI_GET(width); EI_GET(freeze);
+  EI_GET(preDelay); EI_GET(attack); EI_GET(eq6HighCut);
   EI_GET(lfoOn); EI_GET(lfoMode); EI_GET(lfoShape); EI_GET(lfoRate); EI_GET(lfoSync); EI_GET(lfoDivision); EI_GET(lfoDepth); EI_GET(lfoPhase); EI_GET(lfoTarget);
   EI_GET(revOn); EI_GET(revWindow); EI_GET(revSync); EI_GET(revDivision);
   EI_GET(gateOn); EI_GET(gateThreshold); EI_GET(gateAttack); EI_GET(gateHold); EI_GET(gateRelease); EI_GET(gateRange); EI_GET(gateSource);
   EI_GET(mix); EI_GET(output);
 #undef EI_GET
+  for (int n = 0; n < 5; ++n) { tailTime[n] = get(id::tail(n + 1, "Time")); tailLevel[n] = get(id::tail(n + 1, "Level")); }
   for (int b = 0; b < 6; ++b) {
     eqOn[b] = get(id::eq(b + 1, "On")); eqFreq[b] = get(id::eq(b + 1, "Freq"));
     eqGain[b] = get(id::eq(b + 1, "Gain")); eqQ[b] = get(id::eq(b + 1, "Q"));
@@ -120,9 +122,10 @@ EngineParams ParamReader::read() const {
   auto idx = [&](const std::atomic<float>* p) { return int(f(p) + 0.5f); };
 
   EngineParams e;
-  e.size = f(size); e.diffusion = f(diffusion) * 0.01f; e.damping = f(damping) * 0.01f;
+  e.size = f(size); e.diffusion = f(diffusion) * 0.01f; e.density = f(density) * 0.01f; e.damping = f(damping) * 0.01f;
   e.pitch = f(pitch); e.pitchMix = f(pitchMix) * 0.01f; e.width = f(width) * 0.01f; e.freeze = on(freeze);
-  e.preDelayMs = f(preDelay); e.attackSec = f(attack); e.sustainBendDb = f(bender); e.releaseCurve = f(curve) * 0.01f; e.sustainSec = f(sustain); e.releaseSec = f(release); e.releaseInfinite = on(releaseInf);
+  e.preDelayMs = f(preDelay); e.attackSec = f(attack);
+  for (int n = 0; n < 5; ++n) e.tail[n] = {f(tailTime[n]), f(tailLevel[n])};
   for (int b = 0; b < 6; ++b) { e.eq[b].on = on(eqOn[b]); e.eq[b].freq = f(eqFreq[b]); e.eq[b].gainDb = f(eqGain[b]); e.eq[b].q = f(eqQ[b]); }
   e.eqBand6HighCut = on(eq6HighCut);
   e.lfoOn = on(lfoOn);

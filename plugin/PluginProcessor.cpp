@@ -74,8 +74,9 @@ bool ImpossibleSpacesProcessor::popMeterFrame(MeterFrame& frame) {
 
 double ImpossibleSpacesProcessor::getTailLengthSeconds() const {
   const ei::EngineParams p = params_.read();
-  if (p.releaseInfinite || p.freeze) return 60.0;
-  return double(p.releaseSec + p.sustainSec + p.preDelayMs * 0.001f) + (p.reverseOn ? 2.0 : 0.0);
+  const ei::TailPoint& last = p.tail[4];
+  if (p.freeze || last.levelDb > -59.0f) return 60.0;                       // frozen, or a curve that never dies
+  return double(last.time + p.preDelayMs * 0.001f) + (p.reverseOn ? 2.0 : 0.0);
 }
 
 void ImpossibleSpacesProcessor::getStateInformation(juce::MemoryBlock& destData) {

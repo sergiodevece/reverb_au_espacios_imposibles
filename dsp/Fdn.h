@@ -23,9 +23,10 @@ public:
   void setDamping(float bipolar);                // -1: highs die first (darkens). +1: lows die first (brightens)
   void setPitch(float semitones, float mix01);
   void setRelease(float rt60Seconds, bool infinite);
-  void setHold(float hold01);                    // 1 = sustaining: feedback follows the hold rate, damping is off
-  void setHoldRate(float dbPerSecond);           // level change while held: 0 = frozen, + sinks, - grows (Bender)
-  void setReleaseScale(float scale);             // multiplies the release decay rate (release curve)
+  void setHold(float hold01);                    // 1 = held: damping is off (and, without a decay rate, feedback is unity)
+  // Drives the feedback directly: dB lost per second. 0 = lossless, negative = the tail grows.
+  // Once called it replaces setRelease(); the engine uses this to follow the drawn tail curve.
+  void setDecayRate(float dbPerSecond);
   void setFreeze(bool on);
   void setWidth(float width);                    // 0 mono .. 2 extra wide
 
@@ -65,7 +66,8 @@ private:
   float lpCoef_ = 0, lpBlend_ = 0, shelfCoef_ = 0, shelfGain_ = 0;
   float pitchMixTarget_ = 0, pitchMix_ = 0;
   float rt60_ = 4; bool infinite_ = false;
-  float hold_ = 0, holdRate_ = 0, releaseScale_ = 1;
+  float hold_ = 0, decayRate_ = 0;
+  bool rateMode_ = false;
   float freezeTarget_ = 0, freeze_ = 0, freezeCoef_ = 0;
   float maxDelay_ = 0;
 };
