@@ -44,7 +44,7 @@ Qué está comprobado y qué no, sin adornos:
 
 | Aspecto | Estado |
 |---|---|
-| Motor DSP | Verificado con 95 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
+| Motor DSP | Verificado con 94 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
 | Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
 | Validación `auval` | La ejecuta GitHub Actions en cada push |
 | Carga y uso en Logic Pro | Validado por el autor en su Mac: pasa `auval`, carga en Logic y guarda y recupera los ajustes |
@@ -249,7 +249,7 @@ plugin/              Envoltorio JUCE
   PluginEditor.*       Ventana y distribución
   ui/                  Tema, diales, pantallas de envolvente, EQ y LFO
   assets/fonts/        Tipografías incrustadas
-tests/               95 tests del DSP, sin dependencias externas
+tests/               94 tests del DSP, sin dependencias externas
 .github/workflows/   Compilación y validación automáticas
 docs/                Spec de diseño y plan de implementación
 ```
@@ -429,7 +429,7 @@ Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-I
 
 El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
-1. **dsp-tests** (Ubuntu): compila y pasa los 95 tests.
+1. **dsp-tests** (Ubuntu): compila y pasa los 94 tests.
 2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
 
 ### Identidad del plugin
