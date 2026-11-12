@@ -1,0 +1,76 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  dsp-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DEI_BUILD_PLUGIN=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  macos-au:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (universal binary)
+        run: >
+          cmake -B build -G Xcode
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: DSP tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Locate products
+        run: |
+          AU="$(find build -type d -name 'Impossible Spaces.component' -path '*Release*' | head -1)"
+          APP="$(find build -type d -name 'Impossible Spaces.app' -path '*Release*' | head -1)"
+          test -n "$AU" && test -n "$APP"
+          echo "AU=$AU" >> "$GITHUB_ENV"
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Check architectures
+        run: |
+          lipo -archs "$AU/Contents/MacOS/Impossible Spaces" | tee archs.txt
+          grep -q arm64 archs.txt && grep -q x86_64 archs.txt
+
+      - name: Ad-hoc sign
+        run: |
+          codesign --force --deep -s - "$AU"
+          codesign --force --deep -s - "$APP"
+
+      - name: Install and validate with auval
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          rm -rf ~/Library/Audio/Plug-Ins/Components/"Impossible Spaces.component"
+          cp -R "$AU" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          sleep 3
+          auval -a | grep -i "ImSp" || true
+          auval -v aufx ImSp Vita
+
+      - name: Package
+        run: |
+          ditto -c -k --keepParent "$AU" ImpossibleSpaces-AU.zip
+          ditto -c -k --keepParent "$APP" ImpossibleSpaces-Standalone.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ImpossibleSpaces-AU
+          path: ImpossibleSpaces-AU.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ImpossibleSpaces-Standalone
+          path: ImpossibleSpaces-Standalone.zip
