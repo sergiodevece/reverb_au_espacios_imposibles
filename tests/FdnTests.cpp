@@ -148,3 +148,65 @@ TEST(Fdn_releaseScaleSpeedsUpOrSlowsTheDecay) {
   auto z = impulseResponse(g, 4.5);
   CHECK_NEAR(measureRt60(z, kSr, 1.0, 3.2), 4.0, 0.8);
 }
+
+// --- Density ---
+namespace {
+// Normalised echo density (Abel & Huang): share of samples beyond one standard deviation, relative to
+// what Gaussian noise gives. ~0 for a few isolated echoes, ~1 for a fully dense tail.
+double echoDensity(const std::vector<float>& y, int from, int count) {
+  double s = 0; for (int i = from; i < from + count; ++i) s += double(y[size_t(i)]) * y[size_t(i)];
+  const double sigma = std::sqrt(s / count);
+  if (sigma < 1e-12) return 0.0;
+  int outside = 0; for (int i = from; i < from + count; ++i) if (std::fabs(y[size_t(i)]) > sigma) ++outside;
+  return (double(outside) / count) / 0.3173;
+}
+std::vector<float> densityResponse(float density, double seconds, bool hold = false) {
+  ei::Fdn f; f.prepare(kSr);
+  f.setSize(30); f.setDamping(0); f.setDiffusion(0); f.setRelease(3.0f, false); f.setDensity(density);
+  if (hold) f.setHold(1.0f);
+  f.reset();                                   // apply the density from the first sample instead of gliding to it
+  return impulseResponse(f, seconds);
+}
+}
+
+TEST(Fdn_densityControlsEchoDensity) {
+  const int from = int(0.15 * kSr), count = int(0.10 * kSr);          // 150-250 ms after the impulse
+  const double sparse = echoDensity(densityResponse(0.0f, 0.3), from, count);
+  const double normal = echoDensity(densityResponse(0.5f, 0.3), from, count);
+  const double dense = echoDensity(densityResponse(1.0f, 0.3), from, count);
+  CHECK(sparse < 0.25);                       // separate, countable echoes
+  CHECK(normal > sparse + 0.2);
+  CHECK(dense > normal + 0.05);               // denser than the plain network
+  CHECK(dense > 0.8);
+}
+
+TEST(Fdn_densityMidpointIsThePlainNetwork) {
+  ei::Fdn a, b; a.prepare(kSr); b.prepare(kSr);
+  for (auto* f : {&a, &b}) { f->setSize(30); f->setRelease(3.0f, false); }
+  b.setDensity(0.5f);
+  auto ya = impulseResponse(a, 0.5), yb = impulseResponse(b, 0.5);
+  double d = 0; for (size_t i = 0; i < ya.size(); ++i) d = std::fmax(d, std::fabs(ya[i] - yb[i]));
+  CHECK(d == 0.0);                            // the default must not change the sound already approved
+}
+
+TEST(Fdn_densityKeepsEnergyAndDecay) {
+  for (float d : {0.0f, 0.25f, 0.75f, 1.0f}) {
+    auto held = densityResponse(d, 4.5, true);
+    CHECK_NEAR(th::rmsDb(held, int(1.0 * kSr), 24000), th::rmsDb(held, int(4.0 * kSr), 24000), 1.0);   // lossless at any density
+    ei::Fdn f; f.prepare(kSr); f.setSize(30); f.setDamping(0); f.setRelease(2.0f, false); f.setDensity(d); f.reset();
+    auto y = impulseResponse(f, 2.5);
+    CHECK_NEAR(measureRt60(y, kSr, 0.5, 1.6), 2.0, 0.5);
+  }
+}
+
+TEST(Fdn_densitySweepIsSafe) {
+  std::mt19937 rng(21); std::uniform_real_distribution<float> u(-1, 1);
+  ei::Fdn f; f.prepare(kSr); f.setRelease(4.0f, false);
+  bool finite = true; float peak = 0;
+  for (int i = 0; i < 480000; ++i) {
+    if (i % 2400 == 0) { f.setDensity(std::fabs(u(rng))); f.setSize(1.0f + 400.0f * std::fabs(u(rng))); f.setSizeMod(0.5f * u(rng)); }
+    float l, r; f.process(u(rng), u(rng), l, r);
+    finite = finite && std::isfinite(l) && std::isfinite(r); peak = std::fmax(peak, std::fabs(l));
+  }
+  CHECK(finite); CHECK(peak <= 8.0f);
+}

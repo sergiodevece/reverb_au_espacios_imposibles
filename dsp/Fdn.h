@@ -18,6 +18,8 @@ public:
   void setSize(float meters);                    // 1..1000, smoothed (~150 ms)
   void setSizeMod(float mod);                    // -0.5..+0.5, scales every delay by (1 + mod), smoothed (~3 ms)
   void setDiffusion(float amount01);
+  // 0 = separate echoes (the lines stop mixing), 0.5 = the plain network, 1 = extra-dense (diffusers inside the loop).
+  void setDensity(float amount01);
   void setDamping(float bipolar);                // -1: highs die first (darkens). +1: lows die first (brightens)
   void setPitch(float semitones, float mix01);
   void setRelease(float rt60Seconds, bool infinite);
@@ -31,6 +33,7 @@ public:
 
 private:
   void controlTick();
+  void updateMixMatrix();
 
   struct Allpass {
     DelayLine line; int delay = 1;
@@ -48,6 +51,11 @@ private:
   std::array<PitchShifter, kPitchLines> shifters_;
   std::array<std::array<Allpass, 4>, 2> diffusers_;
   std::array<float, kLines> base_{}, baseInc_{}, gain_{}, holdGain_{}, lp_{}, shelf_{};
+  std::array<DelayLine, kLines> apLines_;          // in-loop diffusers, one per line
+  std::array<float, kLines> apBase_{}, apInc_{};
+  float mix4_[4][4] = {};                          // 4x4 block of the mixing matrix; the 16x16 is its Kronecker square
+  bool plainMix_ = true;                           // true = exact Hadamard
+  float densityTarget_ = 0.5f, mixAngle_ = 3.14159265f, apGain_ = 0, apGainCoef_ = 0;
   int tick_ = 0;
   bool settled_ = false;
 
