@@ -77,8 +77,12 @@ void ReverbEngine::setParams(const EngineParams& p) { params_ = p; applyParams()
 void ReverbEngine::applyParams() {
   const EngineParams& p = params_;
   fdn_.setSize(p.size); fdn_.setDiffusion(p.diffusion); fdn_.setDensity(p.density); fdn_.setWidth(p.width); fdn_.setFreeze(p.freeze);
-  tail_.setAttack(p.attackSec); tail_.setPoints(p.tail);
-  fdn_.setDecayRate(tail_.decayRate());
+  fdn_.setRelease(p.releaseSec, p.releaseInfinite);
+  tail_.setSustain(p.sustainSec); tail_.setAttack(p.attackSec);
+  tail_.setRelease(p.releaseSec, p.releaseInfinite); tail_.setCurve(p.releaseCurve);
+  const float sustain = finiteOr(p.sustainSec, 0.0f);
+  const float bend = std::clamp(finiteOr(p.sustainBendDb, 0.0f), -24.0f, 12.0f);
+  fdn_.setHoldRate(sustain > 0.01f ? -bend / sustain : 0.0f);            // spread the bend over the sustain time
 
   preDelayTarget_ = std::clamp(finiteOr(p.preDelayMs, 0.0f), 0.0f, kMaxPreDelayMs) * 0.001f * float(sr_);
 
@@ -131,10 +135,9 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
     // Analysis of the source.
     const float inPeak = std::max(std::fabs(inL), std::fabs(inR));
     const float level = inputFollower_.process(inPeak);
-    tail_.process(activityFollower_.process(inPeak));       // fast detector: the curve starts right as the source stops
-    const float hold = tail_.hold();
+    const float hold = tail_.process(activityFollower_.process(inPeak));   // fast detector: the hold starts right as the source stops
     fdn_.setHold(hold);
-    fdn_.setDecayRate(tail_.decayRate());
+    fdn_.setReleaseScale(tail_.releaseScale());
     const float attackGain = tail_.inputGain();
     approach(lfoMix_, lfoTarget, lfoFadeCoef_);
     const float lfo = lfo_.process(level * 4.0f) * lfoMix_;  // the auto LFO is fully ducked from -12 dBFS up

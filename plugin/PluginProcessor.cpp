@@ -40,8 +40,14 @@ void ImpossibleSpacesProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
 
   double bpm = 0.0;
   if (auto* head = getPlayHead())
-    if (auto pos = head->getPosition())
+    if (auto pos = head->getPosition()) {
       if (auto b = pos->getBpm()) bpm = *b;
+      // Transport stopped: silence the tail (faded, so it does not click) instead of letting it ring on.
+      // Live input keeps working afterwards; only what was already in the reverb is dropped.
+      const bool playing = pos->getIsPlaying();
+      if (wasPlaying_ && !playing) engine_.requestFlush();
+      wasPlaying_ = playing;
+    }
   bpm_.store(bpm > 0.0 ? bpm : 120.0);
 
   engine_.setTempo(bpm);                         // <= 0 falls back to 120 inside the engine
@@ -74,9 +80,8 @@ bool ImpossibleSpacesProcessor::popMeterFrame(MeterFrame& frame) {
 
 double ImpossibleSpacesProcessor::getTailLengthSeconds() const {
   const ei::EngineParams p = params_.read();
-  const ei::TailPoint& last = p.tail[4];
-  if (p.freeze || last.levelDb > -59.0f) return 60.0;                       // frozen, or a curve that never dies
-  return double(last.time + p.preDelayMs * 0.001f) + (p.reverseOn ? 2.0 : 0.0);
+  if (p.releaseInfinite || p.freeze) return 60.0;
+  return double(p.releaseSec + p.sustainSec + p.preDelayMs * 0.001f) + (p.reverseOn ? 2.0 : 0.0);
 }
 
 void ImpossibleSpacesProcessor::getStateInformation(juce::MemoryBlock& destData) {

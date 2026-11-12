@@ -19,9 +19,10 @@ struct EngineParams {
   float size = 30, diffusion = 0.7f, density = 0.5f, damping = -0.3f, pitch = 0, pitchMix = 0, width = 1;
   bool freeze = false;
   // Tail envelope
-  float preDelayMs = 20, attackSec = 0;
-  // The tail after the source stops: five free points (seconds, dB). Default: 60 dB in 4 s.
-  TailPoint tail[TailEnvelope::kPoints] = {{0.8f, -12.0f}, {1.6f, -24.0f}, {2.4f, -36.0f}, {3.2f, -48.0f}, {4.0f, -60.0f}};
+  float preDelayMs = 20, attackSec = 0, sustainSec = 0, releaseSec = 4;
+  float sustainBendDb = 0;      // level change across the sustain: -24 .. +12 dB
+  float releaseCurve = 0;       // -1 falls away then lingers .. +1 holds on then collapses
+  bool releaseInfinite = false;
   // EQ
   EqBand eq[6] = {{false, 40, 0, 0.707f}, {true, 150, 0, 0.707f}, {true, 400, 0, 1.0f},
                   {true, 1500, 0, 1.0f}, {true, 5000, 0, 1.0f}, {true, 10000, 0, 0.707f}};
@@ -43,14 +44,6 @@ struct EngineParams {
   float mix = 0.3f, outputDb = 0;
 };
 
-// Ready-made tail shapes.
-inline void setExponentialTail(EngineParams& p, float rt60) { TailEnvelope::exponential(p.tail, rt60); }
-// Held at full level for `sustain` seconds, then a plain decay of 60 dB in `rt60` seconds.
-inline void setSustainTail(EngineParams& p, float sustain, float rt60) {
-  p.tail[0] = {sustain, 0.0f};
-  for (int i = 1; i < TailEnvelope::kPoints; ++i) p.tail[i] = {sustain + rt60 * float(i) / 4.0f, -60.0f * float(i) / 4.0f};
-}
-
 struct Meters { float inputLevel = 0, wetLevel = 0, gateGain = 1, lfoValue = 0, hold = 0; };
 
 class ReverbEngine {
@@ -70,8 +63,6 @@ public:
   void process(float* left, float* right, int numSamples);   // in place
 
   int latencySamples() const { return params_.reverseOn ? reverser_.latencySamples() : 0; }
-  // Seconds the tail lasts after the source stops, or a negative value if the drawn curve never dies.
-  float tailSeconds() const { return tail_.lengthSeconds(); }
   Meters meters() const { return meters_; }             // peaks over the last block
   const Eq6& eq() const { return eq_; }
 

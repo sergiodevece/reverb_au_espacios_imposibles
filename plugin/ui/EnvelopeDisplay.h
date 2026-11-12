@@ -1,5 +1,5 @@
 // Main screen: the tail envelope drawn over a live history of the input and reverb levels.
-// PRE and ATT set how the reverb comes in; five free points (time, level) draw the tail itself.
+// Six handles: PRE, ATTACK, SUS and REL move in time; BENDER and CURVE bend the sustain and the release.
 #pragma once
 #include "Theme.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -19,38 +19,38 @@ public:
   void mouseDrag(const juce::MouseEvent&) override;
   void mouseUp(const juce::MouseEvent&) override;
   void mouseDoubleClick(const juce::MouseEvent&) override;
-  void mouseExit(const juce::MouseEvent&) override { hover_ = kNone; repaint(); }
+  void mouseExit(const juce::MouseEvent&) override { hover_ = None; repaint(); }
 
 private:
-  static constexpr int kPoints = 5;
-  static constexpr int kNone = -1, kPre = 0, kAttack = 1, kFirstPoint = 2, kNumHandles = kFirstPoint + kPoints;
+  enum Handle { None = -1, Pre, Attack, Sus, Bender, Rel, Curve, NumHandles };
   static constexpr int kHistory = 150;
-  static constexpr float kMinTime = 0.001f, kMaxTime = 80.0f, kTopDb = 12.0f, kBottomDb = -60.0f;
+  static constexpr float kMinTime = 0.001f, kMaxTime = 80.0f, kFloorDb = -72.0f;
 
-  struct Shape {                                  // screen geometry of the envelope, worked out once per event
-    float xPre, xAttack, yZero, bottom;
-    juce::Point<float> pt[kPoints];
-    float time[kPoints], level[kPoints];
-    bool neverDies;
+  // Everything the envelope drawing needs, worked out once per paint or mouse event.
+  struct Shape {
+    float xPre, xAttack, xSus, xRel, top, bottom, ySusEnd, power;
+    bool infinite, hasSustain;
   };
   Shape shape() const;
   juce::Rectangle<float> plot() const;
   float timeToX(float seconds) const;
   float xToTime(float x) const;
-  float levelToY(float db) const;
-  float yToLevel(float y) const;
-  juce::Point<float> handlePos(int handle, const Shape&) const;
-  int handleAt(juce::Point<float>) const;
-  float value(const juce::String& paramId) const;
-  static float defaultOf(juce::ParameterAttachment&, juce::RangedAudioParameter&);
+  float dbToY(float db) const;                       // signal history scale
+  float bendToY(float db, const Shape&) const;       // envelope scale: 0 dB sits on `top`
+  float yToBend(float y, const Shape&) const;
+  juce::Point<float> handlePos(Handle, const Shape&) const;
+  bool handleVisible(Handle, const Shape&) const;
+  static bool isVertical(Handle h) { return h == Bender || h == Curve; }
+  Handle handleAt(juce::Point<float>) const;
+  juce::ParameterAttachment* attachmentFor(Handle);
+  float value(const char* paramId) const;
 
   juce::AudioProcessorValueTreeState& state_;
-  juce::ParameterAttachment pre_, attack_;
-  std::unique_ptr<juce::ParameterAttachment> time_[kPoints], level_[kPoints];
+  juce::ParameterAttachment pre_, attack_, sus_, bender_, rel_, curve_, inf_;
   std::array<float, kHistory> inDb_{}, wetDb_{};
   int head_ = 0;
   float gateGain_ = 1.0f, lfo_ = 0.0f, drift_ = 0.0f;
-  int hover_ = kNone, drag_ = kNone;
+  Handle hover_ = None, drag_ = None;
 };
 
 }  // namespace ui

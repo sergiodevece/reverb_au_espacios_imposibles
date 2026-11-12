@@ -49,6 +49,7 @@ private:
   juce::AbstractFifo meterFifo_{kMeterFifoSize};
   std::array<MeterFrame, kMeterFifoSize> meterFrames_{};
   std::atomic<double> bpm_{120.0};
+  bool wasPlaying_ = false;               // audio thread only
   std::atomic<int> wantedLatency_{0};     // written by the audio thread
   int lastSeenLatency_ = 0;               // message thread only
 
