@@ -44,7 +44,7 @@ Qué está comprobado y qué no, sin adornos:
 
 | Aspecto | Estado |
 |---|---|
-| Motor DSP | Verificado con 58 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
+| Motor DSP | Verificado con 66 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
 | Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
 | Validación `auval` | La ejecuta GitHub Actions en cada push |
 | Carga y uso en Logic Pro | **Pendiente**: requiere un Mac con Logic. Ver la [checklist](#validación-en-logic-checklist) |
@@ -77,7 +77,7 @@ xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"Impossible S
 
 ```bash
 killall -9 AudioComponentRegistrar 2>/dev/null
-auval -v aufx ImSp Vita
+auval -v aufx Imsp Vita
 ```
 
 Debe terminar con `AU VALIDATION SUCCEEDED`.
@@ -97,7 +97,7 @@ El eje horizontal es tiempo en escala logarítmica (de 1 ms a 80 s). La línea b
 | Punto | Parámetro | Rango | Qué hace |
 |---|---|---|---|
 | **PRE** | Pre-Delay | 0–500 ms | Silencio entre la señal y el arranque de la reverb |
-| **SUS** | Sustain | 0–10 s | Tiempo que la cola se mantiene a nivel pleno, sin decaer, después de que calla la fuente |
+| **SUS** | Sustain | 0–10 s | Tiempo que la cola se queda congelada a nivel pleno desde que calla la fuente, antes de empezar a caer |
 | **REL** | Release | 0,1–60 s | Tiempo de caída (RT60). **Doble clic** en el rombo = cola infinita |
 
 Detrás de la curva se ve la señal en tiempo real, desplazándose de derecha a izquierda (unos 5 segundos de historia):
@@ -129,7 +129,7 @@ Ecualiza solo la reverb, no la señal seca.
 |---|---|---|---|
 | **SIZE** | 1–1000 m | 30 m | Tamaño del espacio. Moverlo mientras suena produce un efecto Doppler |
 | **DIFFUSION** | 0–100 % | 70 % | Densidad del arranque: bajo = ecos sueltos, alto = nube |
-| **DAMPING** | −100…+100 % | −30 % | Negativo: la cola se oscurece. Positivo: se abrillanta a cada rebote (imposible en una sala real) |
+| **DAMPING** | −100…+100 % | −30 % | Negativo: los agudos mueren antes y la cola se oscurece. Positivo: mueren antes los graves y la cola se va quedando en puro brillo (imposible en una sala real) |
 | **WIDTH** | 0–200 % | 100 % | Anchura estéreo; 0 = mono |
 | **PITCH** | ±12 semitonos | 0 | Cambio de tono dentro de la realimentación: la cola sube o baja un poco más en cada vuelta |
 | **PITCH MIX** | 0–100 % | 0 % | Cuánta realimentación pasa por el cambio de tono. A 0, PITCH no hace nada |
@@ -225,7 +225,7 @@ plugin/              Envoltorio JUCE
   PluginEditor.*       Ventana y distribución
   ui/                  Tema, diales, pantallas de envolvente, EQ y LFO
   assets/fonts/        Tipografías incrustadas
-tests/               58 tests del DSP, sin dependencias externas
+tests/               66 tests del DSP, sin dependencias externas
 .github/workflows/   Compilación y validación automáticas
 docs/                Spec de diseño y plan de implementación
 ```
@@ -242,15 +242,15 @@ Una *Feedback Delay Network* son varios retardos cuyas salidas se mezclan entre 
 
 Lo "imposible" está en lo que pasa dentro del bucle:
 
-- **Damping bipolar.** En negativo es un paso bajo (de 20 kHz a 500 Hz): cada rebote pierde agudos, como en una sala real. En positivo **suma** agudos en cada vuelta (hasta +3 dB), algo que ningún material puede hacer.
+- **Damping bipolar.** En negativo es un paso bajo (de 20 kHz a 500 Hz): cada rebote pierde agudos, como en una sala real. En positivo ocurre lo contrario: los graves pierden hasta 3 dB más que los agudos en cada vuelta, así que la cola se aclara con el tiempo, algo que ningún material hace. Está normalizado para que ninguna frecuencia supere la ganancia del Release: la cola siempre termina.
 - **Cambio de tono en la realimentación.** Cuatro de las 16 líneas llevan un desplazador de tono. Como la señal da vueltas, cada pasada la desplaza otra vez: la cola sube o baja sin fin.
 - **Saturador.** Con realimentación igual o mayor que 1 la energía crecería sin límite. Un limitador suave en cada línea lo impide; por debajo de cierto nivel es totalmente lineal, para que una cola sostenida no pierda nada.
 
 ### Sustain y release
 
-`TailEnvelope` vigila la entrada. Mientras hay señal (por encima de −50 dBFS) y durante el tiempo de **Sustain** después, sube la realimentación de la FDN a exactamente 1 y desactiva el damping: la cola no pierde energía. Al terminar, la realimentación vuelve al valor que da el RT60 de **Release**, con una transición de 50 ms.
+`TailEnvelope` vigila la entrada con un detector rápido. **Mientras la fuente suena, la reverb decae con normalidad.** En cuanto calla, la realimentación de la FDN sube a exactamente 1 y el damping se desactiva: lo que haya en ese momento dentro de la red se queda a nivel pleno durante el tiempo de **Sustain**. Después la realimentación vuelve al valor que da el RT60 de **Release**, con una transición de 50 ms. Cada golpe nuevo reinicia la cuenta.
 
-Consecuencia a tener en cuenta: durante el sustain, si la fuente sigue sonando, la energía **se acumula**. Es el comportamiento buscado (un espacio que no deja escapar el sonido), y el saturador lo mantiene acotado, pero con sustain largo y material denso la reverb crece mucho.
+Sostener solo cuando la fuente calla es deliberado: si la red tuviese realimentación 1 mientras sigue entrando señal, el nivel se acumularía sin freno.
 
 ### Cambio de tono
 
@@ -296,14 +296,17 @@ El diseño completo está en [`docs/superpowers/specs/`](docs/superpowers/specs/
 
 El desarrollo se hizo en un contenedor Linux: sin macOS, sin Logic y sin altavoces. De ahí la arquitectura en dos capas. El DSP no depende de JUCE ni de Apple, así que se pudo probar entero en Linux; el envoltorio del plugin es fino y lo verifica la integración continua en un Mac real.
 
-### 3. Construcción con tests primero
+### 3. Construcción con tests primero y revisión independiente
+
+Al terminar, un revisor independiente (sin el contexto de quien escribió el código) repasó la rama entera. Encontró un fallo crítico y cuatro importantes que los tests no habían cazado; se corrigieron todos, cada uno con un test nuevo que primero fallaba. Están señalados como *(Revisión)* más abajo.
 
 Cada bloque se escribió así: primero el test, comprobar que falla, luego el código, comprobar que pasa. Orden: retardos → cambio de tono → FDN → envolvente → EQ → LFO → inversor → puerta → motor completo → plugin → interfaz → CI.
 
 Qué miden los tests más relevantes:
 
 - **Tiempo de caída**: se mide el RT60 real de la respuesta al impulso y se compara con Release (0,5, 2 y 8 s; tolerancia ±20 %).
-- **Sustain**: el nivel a 1,5 s es el mismo que a 0,5 s, y a los 4 s ha caído más de 40 dB.
+- **Sustain**: el nivel a 1,5 s es el mismo que a 0,5 s, y a los 4 s ha caído más de 40 dB. Con señal continua, el sustain no sube el nivel; con golpes repetidos, sube menos de 12 dB.
+- **La cola siempre termina**: con cualquier valor de Damping, de −100 a +100 %, cae más de 60 dB.
 - **Estabilidad**: 10 s de ruido a 0 dBFS con cada combinación extrema de tamaño, damping y tono; y 20 s cambiando *todos* los parámetros al azar en cada bloque. Nunca un valor no finito ni fuera de rango.
 - **Silencio**: tras la cola, la salida llega a cero exacto (sin denormales que disparen la CPU).
 - **Independencia del tamaño de bloque**: el mismo audio procesado en bloques de 1, 64, 480 o tamaños aleatorios da el mismo resultado.
@@ -321,6 +324,11 @@ Qué miden los tests más relevantes:
 - **La puerta cerraba tarde** porque compartía detector con la envolvente (lento). Ahora tiene uno propio, más rápido.
 - **Una cola sostenida seguía oscureciéndose** por el damping. Ahora el sustain y el freeze lo desactivan.
 - **La interpolación de los retardos restaba agudos** en cada vuelta, lo que impedía una cola realmente infinita. Ahora los retardos son de longitud entera cuando el tamaño está quieto y solo se interpolan mientras se mueve.
+- **(Revisión) El damping positivo hacía autooscilar la red**: sumaba agudos por encima de la ganancia de la realimentación y la cola no terminaba nunca. Se normalizó para que ninguna frecuencia supere la ganancia del Release.
+- **(Revisión) El sustain acumulaba demasiado nivel** con señal continua. Ahora solo sostiene cuando la fuente calla.
+- **(Revisión) Reactivar REVERSE soltaba audio antiguo** que se había quedado en su búfer. Ahora el inversor se alimenta siempre.
+- **(Revisión) La latencia se comunicaba al host desde el hilo de audio.** Ahora se hace desde el hilo de mensajes y solo cuando el valor se estabiliza.
+- **(Revisión) El EQ cambiaba de golpe.** Ahora cada cambio se desliza en 20 ms.
 - **El primer run de CI se canceló** al instante: la etiqueta `macos-14` ya no tenía runner. Se cambió a `macos-latest`.
 
 ### 5. Interfaz
@@ -352,8 +360,8 @@ Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-I
 
 El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
-1. **dsp-tests** (Ubuntu): compila y pasa los 58 tests.
-2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx ImSp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
+1. **dsp-tests** (Ubuntu): compila y pasa los 66 tests.
+2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
 
 ### Identidad del plugin
 
@@ -361,14 +369,14 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 |---|---|
 | Nombre | Impossible Spaces |
 | Fabricante | VitaPlug (`Vita`) |
-| Código | `ImSp` |
+| Código | `Imsp` |
 | Tipo | `aufx` (efecto) |
 | Bundle ID | `com.vitaplug.impossiblespaces` |
 | Entrada / salida | Estéreo → estéreo, o mono → estéreo |
 
 ## Validación en Logic: checklist
 
-- [ ] `auval -v aufx ImSp Vita` termina con `AU VALIDATION SUCCEEDED`
+- [ ] `auval -v aufx Imsp Vita` termina con `AU VALIDATION SUCCEEDED`
 - [ ] Aparece en *Audio Units → VitaPlug → Impossible Spaces* y carga en una pista estéreo
 - [ ] Carga también en una pista mono (como mono → estéreo)
 - [ ] Suena con los valores por defecto
@@ -389,9 +397,11 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 - **Sonido sin validar por escucha.** Lo más probable es que haga falta retocar constantes: densidad de la cola, carácter del cambio de tono, respuesta del damping positivo.
 - **El cambio de tono es granular**: con material muy tonal y sostenido puede oírse un ligero trémolo a 60 ms.
 - **Solo 4 de las 16 líneas** llevan cambio de tono, por coste de CPU.
-- **Cambiar WINDOW con el inversor en marcha** puede producir un clic en la señal seca, y la nueva longitud tarda hasta una ventana en aplicarse.
+- **Cambiar WINDOW con el inversor en marcha**: la nueva longitud se aplica al terminar el tramo en curso, y en ese momento puede oírse un clic en la señal seca.
 - **Activar o desactivar REVERSE cambia la latencia** del plugin; Logic puede tardar un instante en recompensar.
-- **Con sustain largo y entrada continua la reverb se acumula** hasta el limitador interno. Es intencionado, pero conviene vigilar el nivel.
+- **Con sustain y golpes muy seguidos** (más juntos que el tiempo de Sustain) la reverb apenas decae entre golpe y golpe y el nivel sube unos dB respecto a un golpe aislado.
+- **El aviso de latencia a Logic** llega con hasta 0,2 s de retraso al activar REVERSE o cambiar la ventana.
+- **En bypass con REVERSE activo** la señal no se retrasa lo que el plugin declara de latencia.
 - **Memoria**: unos 17 MB por instancia a 48 kHz y unos 67 MB a 192 kHz, por los retardos de hasta 3 s.
 - **Sin presets de fábrica**, sin VST3/AAX, sin entrada de sidechain externa y con ventana de tamaño fijo (1000×640).
 - **Sin firmar ni notarizar**: hace falta el paso de la cuarentena.

@@ -31,10 +31,17 @@ public:
 
   void prepare(double sampleRate) {
     sr_ = sampleRate; sharedSr_.store(float(sampleRate));
+    rampLength_ = std::max(1, int(0.02 * sampleRate));
+    primed_ = false;
     for (int i = 0; i < kBands; ++i) update(i);
     reset();
   }
-  void reset() { for (auto& ch : state_) for (auto& s : ch) s.reset(); }
+  // Clears the filters and jumps straight to the current settings.
+  void reset() {
+    for (auto& ch : state_) for (auto& s : ch) s.reset();
+    for (int i = 0; i < kBands; ++i) { coeffs_[i] = target_[i]; rampLeft_[i] = 0; active_[i] = targetActive_[i]; }
+    primed_ = false;
+  }
 
   void setBand(int index, const EqBand& b) {
     if (index < 0 || index >= kBands) return;
@@ -49,8 +56,14 @@ public:
   void setBand6HighCut(bool highCut) { if (highCut != highCut_) { highCut_ = highCut; update(5); } }
 
   void process(float& l, float& r) {
+    primed_ = true;
     for (int i = 0; i < kBands; ++i) {
       if (!active_[i]) continue;
+      if (rampLeft_[i] > 0) {                       // glide towards the new setting: no zipper noise, no click
+        BiquadCoeffs& c = coeffs_[i]; const BiquadCoeffs& s = step_[i];
+        c.b0 += s.b0; c.b1 += s.b1; c.b2 += s.b2; c.a1 += s.a1; c.a2 += s.a2;
+        if (--rampLeft_[i] == 0) { c = target_[i]; active_[i] = targetActive_[i]; }
+      }
       l = state_[0][i].process(l, coeffs_[i]);
       r = state_[1][i].process(r, coeffs_[i]);
     }
@@ -74,17 +87,30 @@ private:
     const EqBand& b = bands_[i];
     const Type t = typeOf(i, highCut_);
     const bool isCut = t == Type::LowCut || t == Type::HighCut;
-    active_[i] = b.on && (isCut || b.gainDb != 0.0f);
-    coeffs_[i] = active_[i] ? BiquadCoeffs::design(t, sr_, b.freq, b.gainDb, b.q) : BiquadCoeffs{};
-    const BiquadCoeffs& c = coeffs_[i];
+    targetActive_[i] = b.on && (isCut || b.gainDb != 0.0f);
+    target_[i] = targetActive_[i] ? BiquadCoeffs::design(t, sr_, b.freq, b.gainDb, b.q) : BiquadCoeffs{};
+    const BiquadCoeffs& c = target_[i];
+    if (!primed_) {                                 // nothing has played yet: no need to glide
+      coeffs_[i] = c; rampLeft_[i] = 0; active_[i] = targetActive_[i];
+    } else {
+      const float n = float(rampLength_);
+      const BiquadCoeffs& cur = coeffs_[i];
+      step_[i].b0 = (c.b0 - cur.b0) / n; step_[i].b1 = (c.b1 - cur.b1) / n; step_[i].b2 = (c.b2 - cur.b2) / n;
+      step_[i].a1 = (c.a1 - cur.a1) / n; step_[i].a2 = (c.a2 - cur.a2) / n;
+      rampLeft_[i] = rampLength_;
+      active_[i] = true;                            // stays in the chain until the glide to bypass has finished
+    }
     shared_[i][0].store(c.b0); shared_[i][1].store(c.b1); shared_[i][2].store(c.b2);
     shared_[i][3].store(c.a1); shared_[i][4].store(c.a2);
   }
 
   double sr_ = 48000;
   std::array<EqBand, kBands> bands_{};
-  std::array<BiquadCoeffs, kBands> coeffs_{};
-  std::array<bool, kBands> active_{};
+  std::array<BiquadCoeffs, kBands> coeffs_{}, target_{}, step_{};
+  std::array<bool, kBands> active_{}, targetActive_{};
+  std::array<int, kBands> rampLeft_{};
+  int rampLength_ = 960;
+  bool primed_ = false;
   std::array<std::array<BiquadState, kBands>, 2> state_{};
   std::array<std::array<std::atomic<float>, 5>, kBands> shared_;
   std::atomic<float> sharedSr_{48000.0f};

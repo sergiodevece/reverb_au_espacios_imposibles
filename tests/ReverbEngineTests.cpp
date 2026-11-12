@@ -189,3 +189,44 @@ TEST(Engine_metersReportActivity) {
   ei::Meters m = r.e.meters();
   CHECK(m.inputLevel > 0.1f); CHECK(m.wetLevel > 0.001f); CHECK(m.gateGain > 0.9f);
 }
+
+TEST(Engine_reverseReenableIsSilent) {
+  Rig r; r.p.reverseOn = true; r.p.reverseWindowMs = 200; r.p.releaseSec = 0.3f; r.e.setParams(r.p); r.e.reset();
+  r.run(noiseBurst(r.sr, 1.0, 1.0));
+  r.p.reverseOn = false; r.run(std::vector<float>(size_t(6 * r.sr), 0.0f));
+  r.p.reverseOn = true;
+  auto out = r.run(std::vector<float>(size_t(2 * r.sr), 0.0f));
+  float peak; CHECK(allFinite(out, peak));
+  CHECK(peak < 1e-4f);
+}
+
+TEST(Engine_sustainDoesNotPileUpUnderContinuousInput) {
+  auto in = noiseBurst(48000, 6.0, 6.0, 3, 0.1f);
+  Rig plain; plain.e.setParams(plain.p); plain.e.reset();
+  Rig sus; sus.p.sustainSec = 2; sus.e.setParams(sus.p); sus.e.reset();
+  auto a = plain.run(in), b = sus.run(in);
+  CHECK(levelAt(b, 48000, 5.0, 0.5) < levelAt(a, 48000, 5.0, 0.5) + 1.0f);
+}
+
+TEST(Engine_sustainWithRepeatedHitsStaysModerate) {
+  std::vector<float> in(size_t(10 * 48000), 0.0f);
+  std::mt19937 rng(8); std::uniform_real_distribution<float> u(-0.1f, 0.1f);
+  for (int hit = 0; hit < 20; ++hit) for (int i = 0; i < 2400; ++i) in[size_t(hit * 24000 + i)] = u(rng);
+  Rig single; single.p.sustainSec = 2; single.e.setParams(single.p); single.e.reset();
+  std::vector<float> one(in.begin(), in.begin() + 24000);
+  auto a = single.run(one);
+  Rig many; many.p.sustainSec = 2; many.e.setParams(many.p); many.e.reset();
+  auto b = many.run(in);
+  float pa = -200, pb = -200;
+  for (double t = 0.0; t < 0.45; t += 0.05) pa = std::fmax(pa, levelAt(a, 48000, t));
+  for (double t = 0.0; t < 9.9; t += 0.05) pb = std::fmax(pb, levelAt(b, 48000, t));
+  CHECK(pb < pa + 12.0f);
+}
+
+TEST(Engine_latencyTargetIsStableUnderTempoJitter) {
+  // The engine reports the latency its parameters ask for; the plugin debounces it before telling the host.
+  Rig r; r.p.reverseOn = true; r.p.reverseSync = true; r.p.reverseDivision = 5; r.e.setTempo(120.0); r.e.setParams(r.p);
+  CHECK(r.e.latencySamples() == 24000);
+  r.e.setTempo(120.0004); r.e.setParams(r.p);
+  CHECK(std::abs(r.e.latencySamples() - 24000) <= 1);
+}

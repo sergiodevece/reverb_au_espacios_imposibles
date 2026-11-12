@@ -1,6 +1,7 @@
 // Colours, fonts and shared drawing helpers: black ground, phosphor-green line work.
 #pragma once
 #include <BinaryData.h>
+#include <juce_events/juce_events.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace ui {
@@ -21,7 +22,8 @@ struct Fonts {
   juce::Typeface::Ptr labelBold = juce::Typeface::createSystemTypefaceFor(BinaryData::ChakraPetchSemiBold_ttf, BinaryData::ChakraPetchSemiBold_ttfSize);
   juce::Typeface::Ptr data = juce::Typeface::createSystemTypefaceFor(BinaryData::JetBrainsMonoRegular_ttf, BinaryData::JetBrainsMonoRegular_ttfSize);
 };
-inline const Fonts& fonts() { static Fonts f; return f; }
+// The editor keeps one SharedResourcePointer<Fonts> alive; this just reaches the same instance.
+inline const Fonts& fonts() { return *juce::SharedResourcePointer<Fonts>(); }
 
 inline juce::Font makeFont(const juce::Typeface::Ptr& tf, float height, float kerning) {
   return juce::Font(juce::FontOptions().withTypeface(tf).withHeight(height)).withExtraKerningFactor(kerning);

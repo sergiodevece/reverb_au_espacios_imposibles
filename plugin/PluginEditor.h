@@ -18,6 +18,7 @@ private:
   void timerCallback() override;
   float value(const char* paramId) const;
 
+  juce::SharedResourcePointer<ui::Fonts> fonts_;      // first member: outlives every component that draws text
   ImpossibleSpacesProcessor& processor_;
   juce::AudioProcessorValueTreeState& state_;
 

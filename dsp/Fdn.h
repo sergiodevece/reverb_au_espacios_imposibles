@@ -18,7 +18,7 @@ public:
   void setSize(float meters);                    // 1..1000, smoothed (~150 ms)
   void setSizeMod(float mod);                    // -0.5..+0.5, scales every delay by (1 + mod), smoothed (~3 ms)
   void setDiffusion(float amount01);
-  void setDamping(float bipolar);                // -1 darkens the tail, +1 brightens it
+  void setDamping(float bipolar);                // -1: highs die first (darkens). +1: lows die first (brightens)
   void setPitch(float semitones, float mix01);
   void setRelease(float rt60Seconds, bool infinite);
   void setHold(float hold01);                    // 1 = unity feedback (sustain)

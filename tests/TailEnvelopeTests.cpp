@@ -25,7 +25,7 @@ TEST(Tail_zeroSustainIsZero) {
 }
 TEST(Tail_holdsThenReleases) {
   ei::TailEnvelope e; e.prepare(kSr); e.setSustain(2.0f);
-  auto h = run(e, 2.5, {{0.0, 0.1}}, {0.05, 1.9, 2.2});
+  auto h = run(e, 2.5, {{0.0, 0.1}}, {0.2, 1.9, 2.2});
   CHECK_NEAR(h[0], 1.0, 1e-6); CHECK_NEAR(h[1], 1.0, 1e-6); CHECK_NEAR(h[2], 0.0, 1e-6);
 }
 TEST(Tail_retriggers) {
@@ -37,4 +37,10 @@ TEST(Tail_ignoresNoiseFloor) {
   ei::TailEnvelope e; e.prepare(kSr); e.setSustain(2.0f);
   float h = 0; for (int i = 0; i < 48000; ++i) h = e.process(0.001f);   // -60 dBFS, below the -50 dB threshold
   CHECK_NEAR(h, 0.0, 1e-6);
+}
+// Holding while the source still plays would pile energy up without limit: hold only once it stops.
+TEST(Tail_notHeldWhileSourcePlays) {
+  ei::TailEnvelope e; e.prepare(kSr); e.setSustain(2.0f);
+  auto h = run(e, 1.5, {{0.0, 1.0}}, {0.5, 0.95, 1.2});
+  CHECK_NEAR(h[0], 0.0, 1e-6); CHECK_NEAR(h[1], 0.0, 1e-6); CHECK_NEAR(h[2], 1.0, 1e-6);
 }

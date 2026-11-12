@@ -58,8 +58,8 @@ jobs:
           cp -R "$AU" ~/Library/Audio/Plug-Ins/Components/
           killall -9 AudioComponentRegistrar || true
           sleep 3
-          auval -a | grep -i "ImSp" || true
-          auval -v aufx ImSp Vita
+          auval -a | grep -i "Imsp" || true
+          auval -v aufx Imsp Vita
 
       - name: Package
         run: |

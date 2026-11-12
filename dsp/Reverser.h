@@ -23,6 +23,8 @@ public:
   }
   void setWindowSamples(int n) { window_ = std::clamp(n, 64, maxWindow_); }
   int latencySamples() const { return window_; }
+  // Length the grains are using right now; follows setWindowSamples() at the next grain boundary.
+  int activeWindowSamples() const { return period_; }
 
   void process(float& l, float& r) {
     lines_[0].write(l); lines_[1].write(r);

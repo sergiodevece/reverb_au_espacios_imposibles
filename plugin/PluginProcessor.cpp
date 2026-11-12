@@ -6,7 +6,9 @@ ImpossibleSpacesProcessor::ImpossibleSpacesProcessor()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "ImpossibleSpaces", ei::createParameterLayout()),
-      params_(apvts) {}
+      params_(apvts) {
+  startTimerHz(10);
+}
 
 bool ImpossibleSpacesProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
   const auto in = layouts.getMainInputChannelSet(), out = layouts.getMainOutputChannelSet();
@@ -18,8 +20,9 @@ void ImpossibleSpacesProcessor::prepareToPlay(double sampleRate, int samplesPerB
   engine_.prepare(sampleRate, samplesPerBlock);
   engine_.setParams(params_.read());
   engine_.reset();
-  reportedLatency_ = engine_.latencySamples();
-  setLatencySamples(reportedLatency_);
+  const int latency = engine_.latencySamples();
+  wantedLatency_.store(latency); lastSeenLatency_ = latency;
+  setLatencySamples(latency);
 }
 
 void ImpossibleSpacesProcessor::reset() { engine_.reset(); }
@@ -42,14 +45,22 @@ void ImpossibleSpacesProcessor::processBlock(juce::AudioBuffer<float>& buffer, j
   engine_.setTempo(bpm);                         // <= 0 falls back to 120 inside the engine
   engine_.setParams(params_.read());
 
-  const int latency = engine_.latencySamples();
-  if (latency != reportedLatency_) { reportedLatency_ = latency; setLatencySamples(latency); }
+  wantedLatency_.store(engine_.latencySamples(), std::memory_order_relaxed);   // the host is told from timerCallback()
 
   engine_.process(buffer.getWritePointer(0), buffer.getWritePointer(1), n);
 
   const ei::Meters m = engine_.meters();
   const auto scope = meterFifo_.write(1);
   if (scope.blockSize1 > 0) meterFrames_[size_t(scope.startIndex1)] = {m.inputLevel, m.wetLevel, m.gateGain, m.lfoValue, m.hold};
+}
+
+// Message thread. setLatencySamples() takes locks and makes the host rebuild its delay compensation,
+// so it is kept off the audio thread and only sent once the value has held still for a tick
+// (dragging Window or a tempo ramp would otherwise flood the host).
+void ImpossibleSpacesProcessor::timerCallback() {
+  const int wanted = wantedLatency_.load(std::memory_order_relaxed);
+  if (wanted == lastSeenLatency_ && wanted != getLatencySamples()) setLatencySamples(wanted);
+  lastSeenLatency_ = wanted;
 }
 
 bool ImpossibleSpacesProcessor::popMeterFrame(MeterFrame& frame) {

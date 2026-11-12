@@ -115,3 +115,16 @@ TEST(Fdn_sizeChangesAreFinite) {
   }
   CHECK(finite); CHECK(peak <= 8.0f);
 }
+
+// Brightening must not turn the loop into an oscillator: the tail still dies within the release time.
+TEST(Fdn_tailDecaysAcrossDampingRange) {
+  for (float damp : {-1.0f, -0.3f, 0.0f, 0.3f, 0.8f, 1.0f}) {
+    ei::Fdn f; f.prepare(kSr); f.setSize(8); f.setDamping(damp); f.setRelease(2.0f, false);
+    std::mt19937 rng(9); std::uniform_real_distribution<float> u(-0.1f, 0.1f);
+    std::vector<float> y; float l, r;
+    for (int i = 0; i < int(0.2 * kSr); ++i) { float x = u(rng); f.process(x, x, l, r); y.push_back(l); }
+    for (int i = 0; i < int(5.0 * kSr); ++i) { f.process(0, 0, l, r); y.push_back(l); }
+    float early = th::rmsDb(y, int(0.1 * kSr), 4800), late = th::rmsDb(y, int(4.9 * kSr), 4800);
+    CHECK(late < early - 60.0f);
+  }
+}

@@ -15,7 +15,7 @@
 - Todo el DSP en `namespace ei`, cabeceras en `dsp/`, sin incluir JUCE.
 - Ninguna reserva de memoria, bloqueo ni E/S en el camino de audio (`process*`); toda la memoria se reserva en `prepare`.
 - Frecuencias de muestreo soportadas: 44,1–192 kHz. Tamaños de bloque: de 1 a 8192 muestras.
-- Identidad del plugin: nombre `Impossible Spaces`, fabricante `VitaPlug`, código de fabricante `Vita`, código de plugin `ImSp`, tipo AU `aufx`, bundle id `com.vitaplug.impossiblespaces`, target CMake `ImpossibleSpaces`.
+- Identidad del plugin: nombre `Impossible Spaces`, fabricante `VitaPlug`, código de fabricante `Vita`, código de plugin `Imsp`, tipo AU `aufx`, bundle id `com.vitaplug.impossiblespaces`, target CMake `ImpossibleSpaces`.
 - Formatos: `AU` y `Standalone`. Binario universal `arm64;x86_64`, macOS mínimo 11.0.
 - IDs, rangos y valores por defecto de los parámetros: los de la sección 5 de la spec, literalmente.
 - La salida del motor debe ser finita y con |x| ≤ 8.0 para cualquier combinación de parámetros con entrada |x| ≤ 1.
@@ -313,7 +313,7 @@ public:
 **Decisiones:**
 - Disparadores: `push` a cualquier rama y `workflow_dispatch`.
 - Job `dsp-tests` (`ubuntu-latest`): comando de tests de Global Constraints.
-- Job `macos-au` (`macos-latest`): `cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0`; `cmake --build build --config Release`; tests del DSP; copiar el `.component` a `~/Library/Audio/Plug-Ins/Components/`; `killall -9 AudioComponentRegistrar || true`; `auval -v aufx ImSp Vita`; `lipo -archs` sobre el binario para confirmar `x86_64 arm64`; firma ad-hoc `codesign --force --deep -s -`; empaquetar con `ditto -c -k --keepParent` y subir `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip` con `actions/upload-artifact@v4`.
+- Job `macos-au` (`macos-latest`): `cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0`; `cmake --build build --config Release`; tests del DSP; copiar el `.component` a `~/Library/Audio/Plug-Ins/Components/`; `killall -9 AudioComponentRegistrar || true`; `auval -v aufx Imsp Vita`; `lipo -archs` sobre el binario para confirmar `x86_64 arm64`; firma ad-hoc `codesign --force --deep -s -`; empaquetar con `ditto -c -k --keepParent` y subir `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip` con `actions/upload-artifact@v4`.
 
 - [ ] **Step 1: Escribir el workflow, commit y push.**
 - [ ] **Step 2: Vigilar la ejecución** (herramientas de GitHub Actions) y corregir hasta que ambos jobs estén en verde. Criterio: `auval` termina con `AU VALIDATION SUCCEEDED`.
@@ -333,7 +333,7 @@ public:
 Requiere el Mac del autor. Se intenta conectar la sesión a su Mac (Remote Control); si no es posible, el autor ejecuta los pasos y comunica los resultados.
 
 - [ ] **Step 1: Instalar** el `.component` del artefacto de CI en `~/Library/Audio/Plug-Ins/Components/` y quitar la cuarentena.
-- [ ] **Step 2: Validar** con `auval -v aufx ImSp Vita` en el Mac → `AU VALIDATION SUCCEEDED`.
+- [ ] **Step 2: Validar** con `auval -v aufx Imsp Vita` en el Mac → `AU VALIDATION SUCCEEDED`.
 - [ ] **Step 3: Logic Pro**: reescanear en *Ajustes → Gestor de plug-ins*; comprobar que aparece en *Audio Units → VitaPlug → Impossible Spaces* y que carga en una pista estéreo.
 - [ ] **Step 4: Checklist funcional**: suena con los valores por defecto · la pantalla muestra entrada y reverb · arrastrar pre-delay/sustain/release cambia el sonido · EQ audible y curva coherente · LFO auto y manual · inversor (y compensación de latencia: el dry sigue a tempo) · puerta con fuente Dry sobre una caja · automatización de un parámetro · guardar y reabrir el proyecto conserva el estado · bounce offline sin fallos · uso de CPU razonable.
 - [ ] **Step 5: Recoger impresiones de sonido** y abrir una ronda de ajustes si hace falta (nueva tarea, fuera de este plan).

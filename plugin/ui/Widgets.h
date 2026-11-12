@@ -9,7 +9,7 @@ namespace ui {
 class Knob : public juce::Component {
 public:
   Knob(juce::AudioProcessorValueTreeState& state, const juce::String& paramId, const juce::String& label, bool bipolar = false)
-      : param_(*state.getParameter(paramId)), label_(label), bipolar_(bipolar) {
+      : param_(*state.getParameter(paramId)), label_(label) {
     slider_.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider_.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider_.setRotaryParameters(juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
@@ -64,7 +64,6 @@ private:
 
   juce::RangedAudioParameter& param_;
   juce::String label_;
-  bool bipolar_;
   float radius_ = 20.0f;
   Look look_;
   juce::Slider slider_;

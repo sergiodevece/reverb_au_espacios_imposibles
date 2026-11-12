@@ -31,6 +31,7 @@ void ReverbEngine::prepare(double sampleRate, int /*maxBlockSize*/) {
   eq_.prepare(sampleRate);
   gate_.prepare(sampleRate);
   inputFollower_.prepare(sampleRate); inputFollower_.setTimes(1.0f, 50.0f);
+  activityFollower_.prepare(sampleRate); activityFollower_.setTimes(0.1f, 10.0f);
   gateDryFollower_.prepare(sampleRate); gateDryFollower_.setTimes(0.1f, 10.0f);
   wetFollower_.prepare(sampleRate); wetFollower_.setTimes(0.1f, 10.0f);
   preDelayCoef_ = float(std::exp(-1.0 / (0.05 * sampleRate)));
@@ -44,7 +45,7 @@ void ReverbEngine::reset() {
   for (auto& d : dryDelay_) d.reset();
   applyParams();
   fdn_.reset(); tail_.reset(); lfo_.reset(); reverser_.reset(); eq_.reset(); gate_.reset();
-  inputFollower_.reset(); gateDryFollower_.reset(); wetFollower_.reset();
+  inputFollower_.reset(); activityFollower_.reset(); gateDryFollower_.reset(); wetFollower_.reset();
   tick_ = 0; snap_ = true; meters_ = Meters{};
 }
 
@@ -99,7 +100,6 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
   const EngineParams& p = params_;
   const float revTarget = p.reverseOn ? 1.0f : 0.0f;
   const float gateTarget = p.gateOn ? 1.0f : 0.0f;
-  const int latency = reverser_.latencySamples();
   if (snap_) {
     preDelay_s_ = preDelayTarget_; mixDry_ = mixDryTarget_; mixWet_ = mixWetTarget_; outGain_ = outGainTarget_;
     revMix_ = revTarget; gateMix_ = gateTarget;
@@ -114,7 +114,7 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
     // Analysis of the source.
     const float inPeak = std::max(std::fabs(inL), std::fabs(inR));
     const float level = inputFollower_.process(inPeak);
-    const float hold = tail_.process(level);
+    const float hold = tail_.process(activityFollower_.process(inPeak));   // fast detector: the hold starts right as the source stops
     fdn_.setHold(hold);
     const float lfo = lfo_.process(level * 4.0f);            // the auto LFO is fully ducked from -12 dBFS up
     if (tick_ == 0) controlTick(lfo);
@@ -139,9 +139,10 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
     approach(revMix_, revTarget, fadeCoef_);
     dryDelay_[0].write(inL); dryDelay_[1].write(inR);
     float dryL = inL, dryR = inR;
-    if (revMix_ > 0.0f || revTarget > 0.0f) {
-      float rl = wl, rr = wr;
-      reverser_.process(rl, rr);
+    float rl = wl, rr = wr;
+    reverser_.process(rl, rr);                      // always running, so switching it on never replays stale audio
+    if (revMix_ > 0.0f) {
+      const int latency = reverser_.activeWindowSamples();   // stays aligned with the grains actually playing
       wl += revMix_ * (rl - wl); wr += revMix_ * (rr - wr);
       dryL += revMix_ * (dryDelay_[0].readInt(latency) - inL);
       dryR += revMix_ * (dryDelay_[1].readInt(latency) - inR);

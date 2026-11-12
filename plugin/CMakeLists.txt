@@ -18,7 +18,7 @@ juce_add_plugin(ImpossibleSpaces
   COMPANY_NAME "VitaPlug"
   BUNDLE_ID com.vitaplug.impossiblespaces
   PLUGIN_MANUFACTURER_CODE Vita
-  PLUGIN_CODE ImSp
+  PLUGIN_CODE Imsp
   FORMATS ${EI_FORMATS}
   IS_SYNTH FALSE
   NEEDS_MIDI_INPUT FALSE

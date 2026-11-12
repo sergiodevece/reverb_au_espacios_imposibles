@@ -76,7 +76,7 @@ private:
   Reverser reverser_;
   Eq6 eq_;
   Gate gate_;
-  EnvelopeFollower inputFollower_, gateDryFollower_, wetFollower_;
+  EnvelopeFollower inputFollower_, activityFollower_, gateDryFollower_, wetFollower_;
 
   float preDelayTarget_ = 0, preDelay_s_ = 0, preDelayCoef_ = 0;
   float fadeCoef_ = 0;

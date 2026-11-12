@@ -12,7 +12,6 @@ public:
   static constexpr float kGrainMs = 60.0f;
 
   void prepare(double sampleRate) {
-    sr_ = sampleRate;
     grain_ = float(kGrainMs * 0.001 * sampleRate);
     line_.prepare(int(grain_) + 16);
     bypassCoef_ = float(std::exp(-1.0 / (0.02 * sampleRate)));
@@ -49,7 +48,6 @@ public:
 private:
   static constexpr float kPi = 3.14159265358979f;
   DelayLine line_;
-  double sr_ = 48000;
   float grain_ = 2880, semis_ = 0, inc_ = 0, phase_ = 0, bypass_ = 1, bypassCoef_ = 0;
 };
 

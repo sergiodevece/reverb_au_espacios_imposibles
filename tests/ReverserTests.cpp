@@ -60,3 +60,14 @@ TEST(Rev_clampsWindow) {
     for (int i = 0; i < 200000; ++i) { float l = 0.3f, rr = -0.3f; r.process(l, rr); CHECK(std::isfinite(l) && std::isfinite(rr)); }
   }
 }
+TEST(Rev_activeWindowChangesAtGrainBoundary) {
+  ei::Reverser r; r.prepare(kSr); r.setWindowSamples(1000); r.reset();
+  CHECK(r.activeWindowSamples() == 1000);
+  float l = 0, rr = 0;
+  for (int i = 0; i < 300; ++i) r.process(l, rr);
+  r.setWindowSamples(3000);
+  r.process(l, rr);
+  CHECK(r.activeWindowSamples() == 1000);            // the running grain keeps its length
+  for (int i = 0; i < 1000; ++i) r.process(l, rr);
+  CHECK(r.activeWindowSamples() == 3000);
+}

@@ -93,7 +93,7 @@ void Fdn::setDamping(float d) {
   fc = std::min(fc, 0.45f * float(sr_));
   lpCoef_ = std::exp(-kTwoPi * fc / float(sr_));
   lpBlend_ = std::min(1.0f, dark * 10.0f);                         // exact bypass at 0
-  shelfGain_ = std::max(0.0f, damping_) * 0.41f;                   // up to +3 dB of highs per pass
+  shelfGain_ = std::max(0.0f, damping_) * 0.41f;                   // highs end up to 3 dB above lows per pass
 }
 
 // Runs every kControlInterval samples: smooths Size and refreshes the per-line feedback gains.
@@ -133,6 +133,7 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
   const float hold = std::max(hold_, freeze_);
   const float lpBlend = lpBlend_ * (1.0f - hold);
   const float shelfGain = shelfGain_ * (1.0f - hold);
+  const float shelfNorm = 1.0f / (1.0f + shelfGain);
   const bool integerDelays = settled_ && mod_ == 0.0f;
   const float scale = 1.0f + mod_;
 
@@ -154,7 +155,10 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
     if (std::fabs(lp_[i]) < 1e-20f) lp_[i] = 0.0f;
     shelf_[i] = y + shelfCoef_ * (shelf_[i] - y);
     if (std::fabs(shelf_[i]) < 1e-20f) shelf_[i] = 0.0f;
-    y += lpBlend * (lp_[i] - y) + shelfGain * (y - shelf_[i]);
+    y += lpBlend * (lp_[i] - y);
+    // Brightening: highs keep the full loop gain, lows are turned down. Normalised so no frequency
+    // ever exceeds the release gain, otherwise the loop would ring forever.
+    y = (y + shelfGain * (y - shelf_[i])) * shelfNorm;
 
     // Pitch in the loop: every pass shifts the tail a little further.
     if ((i & 3) == 0) {

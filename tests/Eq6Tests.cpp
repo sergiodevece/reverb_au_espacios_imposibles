@@ -49,3 +49,18 @@ TEST(Eq_clampsBadValues) {
   CHECK(std::isfinite(sineGainDb(eq, 1000)));
   CHECK(eq.magnitudeDb(1000) <= 18.5f * 2);
 }
+// A jump in a band's gain must glide in, not step: no click at the moment of the change.
+TEST(Eq_gainChangeIsSmooth) {
+  ei::Eq6 eq; eq.prepare(kSr);
+  auto sine = [](int i) { return 0.5f * float(std::sin(2 * M_PI * 5000.0 * i / kSr)); };
+  float prev = 0, jumpAtChange = 0, steady = 0;
+  for (int i = 0; i < 48000; ++i) {
+    if (i == 20000) eq.setBand(4, band(true, 5000, 18, 0.5f));
+    float l = sine(i), r = l; eq.process(l, r);
+    float d = std::fabs(l - prev); prev = l;
+    if (i >= 20000 && i < 20004) jumpAtChange = std::fmax(jumpAtChange, d);
+    if (i < 20000) steady = std::fmax(steady, d);
+  }
+  CHECK(jumpAtChange < 1.3f * steady);
+  CHECK_NEAR(sineGainDb(eq, 5000), 18.0, 0.5);     // and it still gets there
+}
