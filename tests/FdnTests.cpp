@@ -210,3 +210,44 @@ TEST(Fdn_densitySweepIsSafe) {
   }
   CHECK(finite); CHECK(peak <= 8.0f);
 }
+
+// --- Input diffusion that grows with the room ---
+namespace {
+std::vector<float> roomResponse(float size, double seconds, float rt60 = 8.0f) {
+  ei::Fdn f; f.prepare(kSr); f.setSize(size); f.setDamping(-0.3f); f.setDiffusion(0.7f); f.setRelease(rt60, false); f.reset();
+  return impulseResponse(f, seconds);
+}
+}
+
+// A short sound in a huge room used to come back as a string of separate echoes for a second or more.
+// The numbers in the comments are what the network gave before the diffusion scaled with Size.
+TEST(Fdn_largeRoomsStartAsACloudNotAsEchoes) {
+  CHECK(echoDensity(roomResponse(100.0f, 0.4), int(0.2 * kSr), 4800) > 0.70);     // was 0.39
+  CHECK(echoDensity(roomResponse(150.0f, 0.6), int(0.4 * kSr), 4800) > 0.75);     // was 0.45
+  CHECK(echoDensity(roomResponse(300.0f, 1.2), int(1.0 * kSr), 4800) > 0.85);     // was 0.61
+  CHECK(echoDensity(roomResponse(300.0f, 0.4), int(0.2 * kSr), 4800) > 0.50);     // was 0.00: nothing had arrived yet
+  CHECK(echoDensity(roomResponse(1000.0f, 0.6), int(0.4 * kSr), 4800) > 0.50);    // was 0.00
+}
+
+// "Impossible spaces": the reverb starts when the pre-delay says so, never when the room size would dictate.
+// (The tank itself has no pre-delay, so here the response must begin at once.)
+TEST(Fdn_onsetDoesNotDependOnSize) {
+  for (float size : {3.0f, 30.0f, 150.0f, 600.0f, 1000.0f}) {
+    ei::Fdn f; f.prepare(kSr); f.setSize(size); f.setRelease(4, false); f.reset();
+    auto y = impulseResponse(f, 0.3);
+    float peak = 0; for (float v : y) peak = std::fmax(peak, std::fabs(v));
+    int first = -1; for (size_t i = 0; i < y.size(); ++i) if (std::fabs(y[i]) > 0.05f * peak) { first = int(i); break; }
+    CHECK(first >= 0);
+    CHECK(first < int(0.012 * kSr));                         // within 12 ms, even for a kilometre-wide room
+    // and it does not go quiet again while waiting for the far walls
+    CHECK(th::rmsDb(y, int(0.05 * kSr), int(0.2 * kSr)) > th::rmsDb(y, 0, int(0.05 * kSr)) - 20.0f);
+  }
+}
+
+TEST(Fdn_largeRoomsKeepTheirDecayTime) {
+  auto y = roomResponse(150.0f, 4.5, 4.0f);
+  CHECK_NEAR(measureRt60(y, kSr, 1.5, 3.5), 4.0, 1.0);
+  ei::Fdn f; f.prepare(kSr); f.setSize(300); f.setDamping(0); f.setRelease(4, false); f.setHold(1.0f); f.reset();
+  auto held = impulseResponse(f, 8.0);
+  CHECK_NEAR(th::rmsDb(held, int(3.0 * kSr), 48000), th::rmsDb(held, int(6.5 * kSr), 48000), 1.0);   // still lossless when held
+}

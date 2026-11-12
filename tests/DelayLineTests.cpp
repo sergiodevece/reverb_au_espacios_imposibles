@@ -57,3 +57,14 @@ TEST(DelayLine_resetForgetsOldAudioWithoutClearing) {
   CHECK_NEAR(d.read(100.5f), 0.25, 1e-6);
   CHECK_NEAR(d.readInt(5000), 0.0, 0.0);
 }
+
+TEST(DelayLine_linearReadInterpolates) {
+  ei::DelayLine d; d.prepare(256);
+  for (int i = 0; i < 100; ++i) d.write(float(i));                 // a ramp: linear interpolation is exact on it
+  CHECK_NEAR(d.readLinear(0.0f), 99.0, 1e-5);
+  CHECK_NEAR(d.readLinear(10.25f), 88.75, 1e-4);
+  CHECK_NEAR(d.readLinear(-3.0f), 99.0, 1e-5);
+  CHECK(std::isfinite(d.readLinear(1e9f)));
+  d.reset();
+  CHECK_NEAR(d.readLinear(5.5f), 0.0, 0.0);
+}

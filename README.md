@@ -44,7 +44,7 @@ Qué está comprobado y qué no, sin adornos:
 
 | Aspecto | Estado |
 |---|---|
-| Motor DSP | Verificado con 89 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
+| Motor DSP | Verificado con 95 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
 | Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
 | Validación `auval` | La ejecuta GitHub Actions en cada push |
 | Carga y uso en Logic Pro | Validado por el autor en su Mac: pasa `auval`, carga en Logic y guarda y recupera los ajustes |
@@ -98,7 +98,7 @@ Los tres **rombos** marcan los tiempos y se arrastran en horizontal:
 
 | Punto | Parámetro | Rango | Qué hace |
 |---|---|---|---|
-| **PRE** | Pre-Delay | 0–500 ms | Silencio entre la señal y el arranque de la reverb |
+| **PRE** | Pre-Delay | 0–500 ms | Silencio entre la señal y el arranque de la reverb. Es lo único que decide cuándo empieza: el tamaño de la sala no la retrasa |
 | **SUS** | Sustain | 0–10 s | Tiempo que la cola se queda sostenida desde que calla la fuente, antes de empezar a caer |
 | **REL** | Release | 0,1–60 s | Tiempo de caída (RT60). **Doble clic** en el rombo = cola infinita |
 
@@ -144,7 +144,7 @@ Ecualiza solo la reverb, no la señal seca.
 
 | Control | Rango | Por defecto | Qué hace |
 |---|---|---|---|
-| **SIZE** | 1–1000 m | 30 m | Tamaño del espacio. Moverlo mientras suena produce un efecto Doppler |
+| **SIZE** | 1–1000 m | 30 m | Escala del espacio: separación entre rebotes y carácter de la cola. **No retrasa el arranque**: incluso a 1000 m la reverb empieza donde diga PRE. Moverlo mientras suena produce un efecto Doppler |
 | **DIFFUSION** | 0–100 % | 70 % | Emborrona el arranque de la reverb: bajo = se distinguen los primeros ecos, alto = nube desde el principio |
 | **DENSITY** | 0–100 % | 50 % | Textura de toda la cola. 0 %: rebotes sueltos que se repiten sin mezclarse. 50 %: la red normal. 100 %: más densa, con difusores dentro del propio bucle. Para ecos realmente separados, baja también DIFFUSION |
 | **DAMPING** | −100…+100 % | −30 % | Negativo: los agudos mueren antes y la cola se oscurece. Positivo: mueren antes los graves y la cola se va quedando en puro brillo (imposible en una sala real) |
@@ -249,7 +249,7 @@ plugin/              Envoltorio JUCE
   PluginEditor.*       Ventana y distribución
   ui/                  Tema, diales, pantallas de envolvente, EQ y LFO
   assets/fonts/        Tipografías incrustadas
-tests/               89 tests del DSP, sin dependencias externas
+tests/               95 tests del DSP, sin dependencias externas
 .github/workflows/   Compilación y validación automáticas
 docs/                Spec de diseño y plan de implementación
 ```
@@ -263,6 +263,8 @@ Una *Feedback Delay Network* son varios retardos cuyas salidas se mezclan entre 
 - **Ganancia por línea** calculada para que la caída total sea de 60 dB en el tiempo de Release: `g = 10^(−3 · T_línea / RT60)`.
 - **Difusores**: 4 filtros pasa-todo en serie por canal antes de la red, para que un golpe seco no suene a ecos sueltos.
 - **Salida estéreo**: las líneas pares van a la izquierda y las impares a la derecha, con signos alternos, lo que da dos canales decorrelados.
+- **La salida no se toma al final de las líneas, sino en 64 puntos repartidos a lo largo de ellas** (cuatro por línea). Varios están casi al principio. Así la reverb responde de inmediato sea cual sea el tamaño, y una sala enorme devuelve un flujo continuo de reflexiones en vez de unos pocos ecos lejanos. Es una decisión deliberadamente no física: en una sala real de 300 m el primer rebote tardaría casi un segundo. Aquí el arranque lo decide el pre-delay y nada más.
+- **La difusión de entrada crece con el tamaño.** Hasta 30 m actúan cuatro difusores cortos y fijos; por encima se suman otros cuatro cuya longitud se estira con la sala, para que un golpe seco en un espacio gigante llegue ya convertido en nube.
 
 Lo "imposible" está en lo que pasa dentro del bucle:
 
@@ -348,6 +350,7 @@ Qué miden los tests más relevantes:
 - **La cola siempre termina**: con cualquier valor de Damping, de −100 a +100 %, cae más de 60 dB.
 - **Estabilidad**: 10 s de ruido a 0 dBFS con cada combinación extrema de tamaño, damping y tono; y 20 s cambiando *todos* los parámetros al azar en cada bloque. Nunca un valor no finito ni fuera de rango.
 - **Attack, Bender y Curve**: la entrada de la reverb queda más de 12 dB por debajo durante el ataque; el sustain sube o baja los dB pedidos; con la curva a +100 % el nivel apenas cae en el primer cuarto del release y con −100 % cae más de 25 dB.
+- **El pre-delay manda**: a 3, 30, 150, 600 y 1000 m la respuesta empieza en los primeros 12 ms tras el pre-delay. La densidad de ecos a 0,1 s en una sala de 300 m pasa de 0,00 a 0,78, y en una de 1000 m de 0,00 a 0,38.
 - **Densidad**: se mide la densidad de ecos de la respuesta al impulso (0 = ecos aislados, 1 = cola totalmente densa). A 0 % queda en 0,01; a 100 % la cola se llena antes que a 50 %. A cualquier valor la energía se conserva y el tiempo de caída se mantiene.
 - **Cambio de tono a dos octavas**: la energía de salida se concentra en la frecuencia pedida.
 - **Reinicio del host**: con la cola sonando, un vaciado no produce clic y 50 ms después no queda nada del sonido anterior.
@@ -393,6 +396,8 @@ En la tercera escucha se **deshizo la curva libre** y se volvió a los seis cont
 
 En esa misma escucha se pidió que **la reverb se calle al parar la reproducción**; antes la cola seguía sonando hasta extinguirse. Ahora, al pasar el transporte de reproducción a parado, la cola se vacía con un fundido de 5 ms. La entrada en directo sigue funcionando con el transporte parado.
 
+En esa escucha el autor señaló además que con SIZE por encima de 100 m y sonidos cortos el resultado era confuso, y fijó un principio de diseño: *el pre-delay marca el comienzo de los rebotes, nunca la física. Espacios imposibles, respuestas imposibles.* Hasta entonces la reverb no sonaba hasta que el sonido recorría la línea más corta de la red, lo que a 300 m eran 0,3 s y a 1000 m un segundo entero. Se cambió la toma de salida (64 puntos a lo largo de las líneas, algunos casi al principio) y se hizo crecer la difusión de entrada con el tamaño. Contrapartida: las salas pequeñas también arrancan antes que en versiones anteriores (unos 30 ms antes a 30 m).
+
 **Pendiente:** el autor oye clics en un bounce con SIZE 73 m y una caja. El análisis del archivo no muestra discontinuidades (la cola tiene la textura de ruido esperada) y el caso no se ha podido reproducir fuera de Logic, así que el origen sigue sin identificar.
 
 ### 6. Interfaz
@@ -424,7 +429,7 @@ Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-I
 
 El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
-1. **dsp-tests** (Ubuntu): compila y pasa los 89 tests.
+1. **dsp-tests** (Ubuntu): compila y pasa los 95 tests.
 2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
 
 ### Identidad del plugin
@@ -462,7 +467,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 ## Limitaciones conocidas
 
 - **Al arrancar, al parar y al saltar el ciclo, la cola de la reverb se vacía** (se funde en 5 ms). No continúa de una vuelta del ciclo a la siguiente ni sigue sonando tras el stop.
-- **SIZE por encima de unos 100 m con sonidos cortos** (una caja, una palmada) da primero una serie de ecos separados y solo después una cola: en un espacio de ese tamaño los primeros rebotes tardan décimas de segundo en volver. Subir DIFFUSION y DENSITY lo suaviza, pero no lo elimina.
+- **La envolvente responde más despacio cuanto mayor es SIZE.** La forma de la cola se consigue variando la realimentación, y un cambio tarda una vuelta completa en afectar a todo el sonido almacenado: unos 90 ms a 30 m, unos 300 ms a 100 m. Por eso CURVE en negativo (caída muy rápida al principio) se queda corta respecto a lo dibujado, sobre todo en salas grandes; los valores positivos y el neutro sí se cumplen con precisión.
 - **DENSITY alto con SIZE muy pequeño** puede dar un timbre metálico: es propio de los difusores dentro del bucle.
 - **Por encima del 50 % de DENSITY, el efecto es sutil si DIFFUSION ya está alto**, porque la cola ya nace densa.
 - **El cambio de tono es granular**: con material muy tonal y sostenido puede oírse un ligero trémolo a 60 ms, más evidente cuanto mayor es el salto (a ±24 semitonos es parte del carácter).
@@ -473,7 +478,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 - **El aviso de latencia a Logic** llega con hasta 0,2 s de retraso al activar REVERSE o cambiar la ventana.
 - **En bypass con REVERSE activo** la señal no se retrasa lo que el plugin declara de latencia.
 - **Memoria**: unos 17 MB por instancia a 48 kHz y unos 67 MB a 192 kHz, por los retardos de hasta 3 s.
-- **CPU**: en las pruebas, alrededor del 3 % de un núcleo con todo activado (medido en Linux, no en un Mac).
+- **CPU**: en las pruebas, entre el 3 % y el 7 % de un núcleo según los ajustes; el caso más caro es sala grande, DENSITY al 100 % y LFO activo (medido en Linux, no en un Mac).
 - **Sin presets de fábrica**, sin VST3/AAX, sin entrada de sidechain externa y con ventana de tamaño fijo (1000×640).
 - **Sin firmar ni notarizar**: hace falta el paso de la cuarentena.
 

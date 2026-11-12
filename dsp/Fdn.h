@@ -11,6 +11,9 @@ public:
   static constexpr int kLines = 16;
   static constexpr int kPitchLines = 4;          // lines 0, 4, 8, 12 carry a pitch shifter
   static constexpr float kMaxLineSeconds = 3.0f;
+  // Rooms up to this size keep the original, fixed input diffusion; above it the diffusion grows with the room.
+  static constexpr float kReferenceSize = 30.0f;
+  static constexpr float kMaxDiffusionScale = 20.0f;
 
   void prepare(double sampleRate);               // allocates
   void reset();
@@ -36,20 +39,25 @@ private:
   void updateMixMatrix();
 
   struct Allpass {
-    DelayLine line; int delay = 1;
+    DelayLine line; float delay = 1, inc = 0;      // delay in samples; `inc` glides it when Size moves
     float process(float x, float g) {
-      float d = line.readInt(delay - 1);
+      delay += inc;
+      const int whole = int(delay);
+      float d = float(whole) == delay ? line.readInt(whole - 1) : line.read(delay - 1.0f);
       float y = d - g * x;
       line.write(x + g * y);
       return y;
     }
   };
+  static constexpr int kDiffusers = 8;             // 4 always on + 4 that only large rooms use
 
   static constexpr int kControlInterval = 16;
   double sr_ = 48000;
   std::array<DelayLine, kLines> lines_;
   std::array<PitchShifter, kPitchLines> shifters_;
-  std::array<std::array<Allpass, 4>, 2> diffusers_;
+  std::array<std::array<Allpass, kDiffusers>, 2> diffusers_;
+  float diffuserBase_[2][kDiffusers] = {};        // reference lengths in samples
+  float extraDiffusion_ = 0;                      // 0 up to the reference room size, 1 well above it
   std::array<float, kLines> base_{}, baseInc_{}, gain_{}, holdGain_{}, lp_{}, shelf_{};
   std::array<DelayLine, kLines> apLines_;          // in-loop diffusers, one per line
   std::array<float, kLines> apBase_{}, apInc_{};

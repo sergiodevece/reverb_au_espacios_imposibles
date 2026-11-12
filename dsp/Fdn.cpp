@@ -12,13 +12,27 @@ constexpr float kRatios[Fdn::kLines] = {0.353f, 0.389f, 0.431f, 0.467f, 0.509f, 
 // Output tap signs: even lines feed the left channel, odd lines the right.
 constexpr float kTapSign[Fdn::kLines] = {1, 1, -1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, -1, 1};
 constexpr float kDiffuserMs[4] = {4.7f, 3.6f, 12.7f, 9.3f};
+// Extra diffusers for large rooms: milliseconds per unit of (size / reference - 1), so they start from nothing.
+constexpr float kExtraDiffuserMs[4] = {5.3f, 8.9f, 14.1f, 19.7f};
+constexpr float kMaxExtraDiffuserMs = 300.0f;
+// Where along each line the output is picked up, as shares of its length: four taps per line, 64 in all,
+// each one a reflection of its own. A few sit almost at the start of their line, so the reverb answers at once
+// whatever the room size (the pre-delay alone decides when it begins); the rest are spread irregularly, so even
+// a room hundreds of metres wide returns a steady stream of reflections instead of a few distant echoes.
+constexpr int kTaps = 4;
+constexpr float kTapShare[Fdn::kLines][kTaps] = {
+    {0.002f, 0.283f, 0.561f, 0.847f}, {0.003f, 0.317f, 0.609f, 0.883f}, {0.071f, 0.359f, 0.631f, 0.917f}, {0.103f, 0.397f, 0.673f, 0.953f},
+    {0.037f, 0.241f, 0.523f, 0.787f}, {0.053f, 0.271f, 0.541f, 0.811f}, {0.139f, 0.433f, 0.709f, 0.971f}, {0.167f, 0.461f, 0.739f, 0.991f},
+    {0.019f, 0.223f, 0.487f, 0.761f}, {0.029f, 0.199f, 0.503f, 0.773f}, {0.008f, 0.337f, 0.593f, 0.863f}, {0.011f, 0.373f, 0.647f, 0.907f},
+    {0.089f, 0.307f, 0.577f, 0.829f}, {0.113f, 0.349f, 0.619f, 0.877f}, {0.151f, 0.409f, 0.683f, 0.937f}, {0.181f, 0.443f, 0.727f, 0.967f}};
+constexpr float kTapPolarity[kTaps] = {1.0f, -1.0f, -1.0f, 1.0f};
 // In-loop diffuser length as a share of its line. The share is carved out of the line, so the loop time is unchanged.
 constexpr float kApShare[Fdn::kLines] = {0.31f, 0.23f, 0.37f, 0.27f, 0.21f, 0.35f, 0.25f, 0.39f,
                                          0.29f, 0.19f, 0.33f, 0.24f, 0.38f, 0.22f, 0.34f, 0.28f};
 constexpr float kApMaxGain = 0.6f;
 constexpr float kPi = 3.14159265358979f;
 constexpr float kInputGain = 0.5f;
-constexpr float kOutputGain = 0.35f;
+constexpr float kOutputGain = 0.175f;      // four taps per line: half the gain keeps the level where it was
 
 // Linear below |x| = 1 (so a held tail is lossless), smoothly limited to +-2 above.
 inline float softClip(float x) {
@@ -77,11 +91,16 @@ void Fdn::prepare(double sampleRate) {
   apGainCoef_ = float(std::exp(-1.0 / (0.05 * sampleRate)));
   for (auto& s : shifters_) s.prepare(sampleRate);
   for (int ch = 0; ch < 2; ++ch)
-    for (int k = 0; k < 4; ++k) {
-      float ms = kDiffuserMs[k] * (ch == 0 ? 1.0f : 1.07f);
-      int d = std::max(2, int(ms * 0.001 * sampleRate));
-      diffusers_[ch][k].line.prepare(d + 4);
-      diffusers_[ch][k].delay = d;
+    for (int k = 0; k < kDiffusers; ++k) {
+      const float stereo = ch == 0 ? 1.0f : 1.07f;
+      if (k < 4) {
+        const int d = std::max(2, int(kDiffuserMs[k] * stereo * 0.001 * sampleRate));
+        diffuserBase_[ch][k] = float(d);
+        diffusers_[ch][k].line.prepare(d + 8);
+      } else {
+        diffuserBase_[ch][k] = float(kExtraDiffuserMs[k - 4] * stereo * 0.001 * sampleRate);
+        diffusers_[ch][k].line.prepare(int(kMaxExtraDiffuserMs * 0.001 * sampleRate) + 8);
+      }
     }
   sizeCoef_ = float(std::exp(-double(kControlInterval) / (0.15 * sampleRate)));
   modCoef_ = float(std::exp(-1.0 / (0.003 * sampleRate)));
@@ -107,6 +126,7 @@ void Fdn::reset() {
     apBase_[i] = base_[i] * kApShare[i]; apInc_[i] = 0;
   }
   controlTick();
+  for (auto& ch : diffusers_) for (auto& a : ch) { a.delay += a.inc * float(kControlInterval); a.inc = 0; }
   for (int i = 0; i < kLines; ++i) {             // start settled: land on the first targets at once
     base_[i] += baseInc_[i] * float(kControlInterval); apBase_[i] += apInc_[i] * float(kControlInterval);
     baseInc_[i] = 0; apInc_[i] = 0;
@@ -150,6 +170,24 @@ void Fdn::controlTick() {
   bool sizeSettled = std::fabs(size_ - sizeTarget_) < 1e-4f * sizeTarget_;
   if (sizeSettled) size_ = sizeTarget_;
 
+  // Input diffusion grows with the room above the reference size, so a short sound in a huge space
+  // comes back as a cloud rather than as a string of separate echoes.
+  const float scale = std::clamp(size_ / kReferenceSize, 1.0f, kMaxDiffusionScale);
+  const float extra = std::min(1.0f, (scale - 1.0f) * 2.0f);
+  if (extra > 0.0f && extraDiffusion_ == 0.0f)                       // switching in: drop whatever they held last time
+    for (auto& ch : diffusers_) for (int k = 4; k < kDiffusers; ++k) ch[size_t(k)].line.reset();
+  extraDiffusion_ = extra;
+  const float maxExtra = kMaxExtraDiffuserMs * 0.001f * float(sr_);
+  for (int ch = 0; ch < 2; ++ch)
+    for (int k = 0; k < kDiffusers; ++k) {
+      // The first four keep their short, fixed lengths (fine grain); the extra four stretch with the room (coarse spread).
+      float target = k < 4 ? diffuserBase_[ch][k] : std::clamp(diffuserBase_[ch][k] * (scale - 1.0f), 1.0f, maxExtra);
+      if (sizeSettled) target = std::round(target);
+      Allpass& a = diffusers_[size_t(ch)][size_t(k)];
+      if (std::fabs(target - a.delay) < 1e-3f) { a.delay = target; a.inc = 0.0f; }
+      else a.inc = (target - a.delay) / float(kControlInterval);
+    }
+
   // Density, lower half: how much the lines mix.
   const float angleTarget = kPi * std::min(1.0f, densityTarget_ * 2.0f);
   if (mixAngle_ != angleTarget) {
@@ -186,6 +224,10 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
   const float g = 0.75f * diffusion_;
   float dl = inL, dr = inR;
   for (int k = 0; k < 4; ++k) { dl = diffusers_[0][k].process(dl, g); dr = diffusers_[1][k].process(dr, g); }
+  if (extraDiffusion_ > 0.0f) {
+    const float ge = g * extraDiffusion_;
+    for (int k = 4; k < kDiffusers; ++k) { dl = diffusers_[0][k].process(dl, ge); dr = diffusers_[1][k].process(dr, ge); }
+  }
   const float inGain = kInputGain * (1.0f - freeze_);
   dl *= inGain; dr *= inGain;
 
@@ -209,21 +251,25 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
     base_[i] += baseInc_[i]; apBase_[i] += apInc_[i];
     // Each line is split in two: a plain delay followed by a diffuser (a Schroeder all-pass) whose own delay
     // is carved out of the line. With the diffuser gain at 0 the two add up to the plain line again.
-    float y, tap, apOut;
+    float y, tap, apOut, out;                     // `out`: what this line contributes to the output
     if (integerDelays) {
       const int total = int(base_[i] + 0.5f), ap = std::clamp(int(apBase_[i] + 0.5f), 1, std::max(1, total - 3));
       tap = lines_[i].readInt(total - ap - 1);
       apOut = apLines_[i].readInt(ap - 1);
       y = apGain == 0.0f ? lines_[i].readInt(total - 1) : apOut - apGain * tap;
+      out = 0.0f;
+      for (int k = 0; k < kTaps; ++k) out += kTapPolarity[(k + i) & 3] * lines_[i].readInt(int(float(total) * kTapShare[i][k]));
     } else {
       const float total = std::clamp(base_[i] * scale, 4.0f, maxDelay_);
       const float ap = std::clamp(apBase_[i] * scale, 2.0f, std::max(2.0f, total - 3.0f));
       tap = lines_[i].read(total - ap - 1.0f);
       apOut = apLines_[i].read(ap - 1.0f);
       y = apGain == 0.0f ? lines_[i].read(total - 1.0f) : apOut - apGain * tap;
+      out = 0.0f;
+      for (int k = 0; k < kTaps; ++k) out += kTapPolarity[(k + i) & 3] * lines_[i].readLinear(total * kTapShare[i][k]);
     }
     apLines_[i].write(apGain == 0.0f ? tap : tap + apGain * y);    // kept warm even when unused, so switching it in is seamless
-    if (i & 1) sumR += kTapSign[i] * y; else sumL += kTapSign[i] * y;
+    if (i & 1) sumR += kTapSign[i] * out; else sumL += kTapSign[i] * out;
 
     // Damping.
     lp_[i] = y + lpCoef_ * (lp_[i] - y);

@@ -33,6 +33,17 @@ public:
     if (d >= valid_) return 0.0f;
     return buf_[size_t((w_ - 1 - d) & mask_)];
   }
+  // Cheaper two-point read, for taps that are only listened to (never fed back): no need for Hermite there.
+  float readLinear(float delaySamples) const {
+    float d = delaySamples;
+    if (!(d >= 0.0f)) d = 0.0f;                        // also catches NaN
+    d = std::min(d, float(max_ - 1));
+    const int n = int(d);
+    if (n + 1 >= valid_) return 0.0f;
+    const float f = d - float(n);
+    const float a = buf_[size_t((w_ - 1 - n) & mask_)], b = buf_[size_t((w_ - 2 - n) & mask_)];
+    return a + f * (b - a);
+  }
   float read(float delaySamples) const {
     float d = delaySamples;
     if (!(d >= 1.0f)) d = 1.0f;                       // also catches NaN
