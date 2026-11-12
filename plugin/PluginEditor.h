@@ -30,6 +30,7 @@ private:
   ui::Knob size_, diffusion_, damping_, width_, pitch_, pitchMix_;
   ui::Toggle freeze_;
   // LFO
+  ui::Toggle lfoOn_;
   ui::Chips lfoMode_, lfoShape_, lfoTarget_;
   ui::LfoView lfoView_;
   ui::Knob lfoRate_, lfoDivision_, lfoDepth_, lfoPhase_;

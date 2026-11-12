@@ -230,3 +230,79 @@ TEST(Engine_latencyTargetIsStableUnderTempoJitter) {
   r.e.setTempo(120.0004); r.e.setParams(r.p);
   CHECK(std::abs(r.e.latencySamples() - 24000) <= 1);
 }
+
+namespace {
+// Largest 3rd-difference in [from, to), relative to its RMS over the preceding second: a click detector.
+double clickRatio(const std::vector<float>& y, int from, int to, int sr) {
+  auto d3 = [&](int i) { return double(y[i]) - 3.0 * y[i - 1] + 3.0 * y[i - 2] - y[i - 3]; };
+  double rms = 0; for (int i = from - sr; i < from; ++i) rms += d3(i) * d3(i);
+  rms = std::sqrt(rms / sr) + 1e-12;
+  double worst = 0; for (int i = from; i < to; ++i) worst = std::fmax(worst, std::fabs(d3(i)));
+  return worst / rms;
+}
+std::vector<float> smoothTone(double sr, double seconds, double stopAt) {
+  std::vector<float> v(size_t(seconds * sr), 0.0f);
+  for (size_t i = 0; i < v.size(); ++i) {
+    double t = i / sr, fade = t < stopAt - 0.05 ? 1.0 : (t < stopAt ? 0.5 + 0.5 * std::cos(M_PI * (t - (stopAt - 0.05)) / 0.05) : 0.0);
+    v[i] = float(0.4 * fade * std::sin(2 * M_PI * 220.0 * t));
+  }
+  return v;
+}
+}
+
+// The host asks for a flush when the transport starts or the cycle jumps, while the tail may be ringing.
+TEST(Engine_flushFadesTheTailInsteadOfCuttingIt) {
+  Rig r; r.p.releaseSec = 6; r.e.setParams(r.p); r.e.reset();
+  auto in = smoothTone(r.sr, 3.0, 1.5);
+  std::vector<float> out;
+  for (size_t o = 0; o < in.size(); o += 512) {
+    if (o == size_t(512 * 187)) r.e.requestFlush();            // ~2.0 s: tail in full swing
+    std::vector<float> l(in.begin() + long(o), in.begin() + long(std::min(in.size(), o + 512))), rr = l;
+    r.e.setParams(r.p); r.e.process(l.data(), rr.data(), int(l.size()));
+    out.insert(out.end(), l.begin(), l.end());
+  }
+  const int at = 512 * 187;
+  CHECK(th::rmsDb(out, at - 4800, 4800) > -50.0f);                 // it was sounding
+  CHECK(clickRatio(out, at, at + 2400, 48000) < 6.0);              // no click when it goes
+  float peak = 0; for (int i = at + 2400; i < at + 24000; ++i) peak = std::fmax(peak, std::fabs(out[size_t(i)]));
+  CHECK(peak < 1e-5f);                                             // and the old tail is really gone
+}
+
+TEST(Engine_flushThenNewAudioStillReverberates) {
+  Rig r; r.e.setParams(r.p); r.e.reset();
+  r.run(noiseBurst(r.sr, 0.5, 1.0));
+  r.e.requestFlush();
+  auto out = r.run(noiseBurst(r.sr, 0.2, 1.0, 21));
+  CHECK(levelAt(out, r.sr, 0.5) > -60.0f);
+}
+
+TEST(Engine_lfoOffStopsModulation) {
+  auto in = noiseBurst(48000, 0.5, 2.0);
+  auto make = [&](bool on, float depth) {
+    Rig r; r.p.lfoMode = ei::Lfo::Mode::Manual; r.p.lfoRateHz = 3; r.p.lfoDepth = depth; r.p.lfoOn = on;
+    r.e.setParams(r.p); r.e.reset(); return r.run(in);
+  };
+  auto still = make(true, 0.0f), off = make(false, 1.0f), on = make(true, 1.0f);
+  double dOff = 0, dOn = 0;
+  for (size_t i = 0; i < still.size(); ++i) { dOff = std::fmax(dOff, std::fabs(off[i] - still[i])); dOn = std::fmax(dOn, std::fabs(on[i] - still[i])); }
+  CHECK(dOff < 1e-6);
+  CHECK(dOn > 1e-3);
+}
+
+// Measured with noise: a pure tone would only show the room's resonances shifting, not clicks.
+TEST(Engine_lfoToggleDoesNotClick) {
+  Rig r; r.p.lfoMode = ei::Lfo::Mode::Manual; r.p.lfoShape = ei::Lfo::Shape::Square; r.p.lfoRateHz = 0.2f; r.p.lfoDepth = 1; r.p.releaseSec = 6;
+  r.e.setParams(r.p); r.e.reset();
+  auto in = noiseBurst(r.sr, 4.0, 4.0, 13, 0.3f);
+  std::vector<float> out;
+  const size_t at = 512 * 187;
+  for (size_t o = 0; o < in.size(); o += 512) {
+    if (o == at) r.p.lfoOn = false;
+    std::vector<float> l(in.begin() + long(o), in.begin() + long(std::min(in.size(), o + 512))), rr = l;
+    r.e.setParams(r.p); r.e.process(l.data(), rr.data(), int(l.size()));
+    out.insert(out.end(), l.begin(), l.end());
+  }
+  const double before = clickRatio(out, int(at) - 24000, int(at), 48000), after = clickRatio(out, int(at), int(at) + 24000, 48000);
+  CHECK(after < 1.5 * before);
+  CHECK(levelAt(out, 48000, double(at) / 48000 + 0.01, 0.05) < levelAt(out, 48000, double(at) / 48000 - 0.06, 0.05) + 3.0f);
+}

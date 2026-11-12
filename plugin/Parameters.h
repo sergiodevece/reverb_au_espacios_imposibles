@@ -11,7 +11,7 @@ namespace id {
 EI_ID(size); EI_ID(diffusion); EI_ID(damping); EI_ID(pitch); EI_ID(pitchMix); EI_ID(width); EI_ID(freeze);
 EI_ID(preDelay); EI_ID(sustain); EI_ID(release); EI_ID(releaseInf);
 EI_ID(eq6HighCut);
-EI_ID(lfoMode); EI_ID(lfoShape); EI_ID(lfoRate); EI_ID(lfoSync); EI_ID(lfoDivision); EI_ID(lfoDepth); EI_ID(lfoPhase); EI_ID(lfoTarget);
+EI_ID(lfoOn); EI_ID(lfoMode); EI_ID(lfoShape); EI_ID(lfoRate); EI_ID(lfoSync); EI_ID(lfoDivision); EI_ID(lfoDepth); EI_ID(lfoPhase); EI_ID(lfoTarget);
 EI_ID(revOn); EI_ID(revWindow); EI_ID(revSync); EI_ID(revDivision);
 EI_ID(gateOn); EI_ID(gateThreshold); EI_ID(gateAttack); EI_ID(gateHold); EI_ID(gateRelease); EI_ID(gateRange); EI_ID(gateSource);
 EI_ID(mix); EI_ID(output);
@@ -34,7 +34,7 @@ private:
   std::atomic<float> *size, *diffusion, *damping, *pitch, *pitchMix, *width, *freeze;
   std::atomic<float> *preDelay, *sustain, *release, *releaseInf;
   std::atomic<float> *eqOn[6], *eqFreq[6], *eqGain[6], *eqQ[6], *eq6HighCut;
-  std::atomic<float> *lfoMode, *lfoShape, *lfoRate, *lfoSync, *lfoDivision, *lfoDepth, *lfoPhase, *lfoTarget;
+  std::atomic<float> *lfoOn, *lfoMode, *lfoShape, *lfoRate, *lfoSync, *lfoDivision, *lfoDepth, *lfoPhase, *lfoTarget;
   std::atomic<float> *revOn, *revWindow, *revSync, *revDivision;
   std::atomic<float> *gateOn, *gateThreshold, *gateAttack, *gateHold, *gateRelease, *gateRange, *gateSource;
   std::atomic<float> *mix, *output;

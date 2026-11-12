@@ -15,18 +15,22 @@ public:
     while (size < max_ + 4) size <<= 1;
     buf_.assign(size_t(size), 0.0f);
     mask_ = size - 1;
-    w_ = 0;
+    w_ = 0; valid_ = 0;
   }
-  void reset() { std::fill(buf_.begin(), buf_.end(), 0.0f); w_ = 0; }
+  // Instant: nothing is cleared. Samples written before the reset simply become unreadable (they read as
+  // silence), so this is safe to call on the audio thread however long the line is.
+  void reset() { w_ = 0; valid_ = 0; }
   int maxDelay() const { return max_; }
 
   void write(float x) {
     buf_[size_t(w_)] = x;
     w_ = (w_ + 1) & mask_;
+    if (valid_ <= mask_) ++valid_;
   }
   // delay 0 = the sample just written.
   float readInt(int delaySamples) const {
     int d = std::clamp(delaySamples, 0, max_);
+    if (d >= valid_) return 0.0f;
     return buf_[size_t((w_ - 1 - d) & mask_)];
   }
   float read(float delaySamples) const {
@@ -34,6 +38,7 @@ public:
     if (!(d >= 1.0f)) d = 1.0f;                       // also catches NaN
     d = std::min(d, float(max_ - 3));
     int n = int(d);
+    if (n + 2 >= valid_) return 0.0f;
     float f = d - float(n);
     int base = w_ - 1 - n;
     float ym = buf_[size_t((base + 1) & mask_)];
@@ -49,6 +54,7 @@ public:
 private:
   std::vector<float> buf_;
   int mask_ = 0, w_ = 0, max_ = 8;
+  int valid_ = 0;   // samples written since the last reset, capped at the buffer size
 };
 
 }  // namespace ei

@@ -10,6 +10,7 @@
 #include "Lfo.h"
 #include "Reverser.h"
 #include "TailEnvelope.h"
+#include <atomic>
 
 namespace ei {
 
@@ -25,6 +26,7 @@ struct EngineParams {
                   {true, 1500, 0, 1.0f}, {true, 5000, 0, 1.0f}, {true, 10000, 0, 0.707f}};
   bool eqBand6HighCut = false;
   // LFO
+  bool lfoOn = true;
   Lfo::Mode lfoMode = Lfo::Mode::Auto;
   Lfo::Shape lfoShape = Lfo::Shape::Sine;
   float lfoRateHz = 0.5f; bool lfoSync = false; int lfoDivision = 3;
@@ -50,7 +52,10 @@ public:
   static constexpr float kLfoSizeRange = 0.5f, kLfoPitchRange = 2.0f, kLfoDampingRange = 0.5f, kLfoPanRange = 1.0f;
 
   void prepare(double sampleRate, int maxBlockSize);   // allocates
-  void reset();
+  void reset();                                         // immediate, for use while no audio is running
+  // Asks for the tail to be dropped. Safe from any thread and click-free: the next process() call fades
+  // the wet signal out over a few milliseconds, forgets everything, then fades back in.
+  void requestFlush() { flushPending_.store(true, std::memory_order_release); }
   void setParams(const EngineParams& p);               // once per block
   void setTempo(double bpm);                           // <= 0 falls back to 120
   void process(float* left, float* right, int numSamples);   // in place
@@ -61,6 +66,8 @@ public:
 
 private:
   void applyParams();
+  void clearState();
+  void snapSmoothers();
   void controlTick(float lfoValue);
 
   static constexpr int kControlInterval = 32;
@@ -83,6 +90,10 @@ private:
   float mixDry_ = 1, mixWet_ = 0, mixDryTarget_ = 1, mixWetTarget_ = 0;
   float outGain_ = 1, outGainTarget_ = 1;
   float revMix_ = 0, gateMix_ = 0, pan_ = 0, panTarget_ = 0;
+  float lfoMix_ = 1, lfoFadeCoef_ = 0;
+  std::atomic<bool> flushPending_{false};
+  enum class Flush { Idle, FadingOut, FadingIn } flush_ = Flush::Idle;
+  int flushPos_ = 0, flushLength_ = 240;
   Meters meters_;
 };
 

@@ -18,6 +18,7 @@ ImpossibleSpacesEditor::ImpossibleSpacesEditor(ImpossibleSpacesProcessor& p)
       damping_(state_, ei::id::damping, "DAMPING", true), width_(state_, ei::id::width, "WIDTH"),
       pitch_(state_, ei::id::pitch, "PITCH", true), pitchMix_(state_, ei::id::pitchMix, "PITCH MIX"),
       freeze_(state_, ei::id::freeze, ui::Toggle::Style::Box, "FREEZE"),
+      lfoOn_(state_, ei::id::lfoOn, ui::Toggle::Style::Led),
       lfoMode_(state_, ei::id::lfoMode, {"AUTO", "MANUAL"}),
       lfoShape_(state_, ei::id::lfoShape, {"SIN", "TRI", "SAW", "SQR", "RND"}),
       lfoTarget_(state_, ei::id::lfoTarget, {"SIZE", "PITCH", "DAMP", "PAN"}),
@@ -35,7 +36,7 @@ ImpossibleSpacesEditor::ImpossibleSpacesEditor(ImpossibleSpacesProcessor& p)
       mix_(state_, ei::id::mix, "MIX"), output_(state_, ei::id::output, "LEVEL", true) {
   for (juce::Component* c : std::initializer_list<juce::Component*>{
            &envelope_, &eq_, &eqBand6Mode_, &size_, &diffusion_, &damping_, &width_, &pitch_, &pitchMix_, &freeze_,
-           &lfoMode_, &lfoShape_, &lfoTarget_, &lfoView_, &lfoRate_, &lfoDivision_, &lfoDepth_, &lfoPhase_, &lfoSync_,
+           &lfoOn_, &lfoMode_, &lfoShape_, &lfoTarget_, &lfoView_, &lfoRate_, &lfoDivision_, &lfoDepth_, &lfoPhase_, &lfoSync_,
            &revOn_, &revWindow_, &revDivision_, &revSync_,
            &gateOn_, &gateThreshold_, &gateRange_, &gateAttack_, &gateHold_, &gateRelease_, &gateSource_, &mix_, &output_})
     addAndMakeVisible(c);
@@ -60,6 +61,7 @@ void ImpossibleSpacesEditor::resized() {
 
   // LFO
   const int lx = kLfo.getX(), lw = kLfo.getWidth();
+  lfoOn_.setBounds(lx + 44, kRowY + 5, 44, 16);
   lfoMode_.setBounds(lx + lw - 112, kRowY + 6, 100, 15);
   lfoView_.setBounds(lx + 12, kRowY + 32, lw - 24, 48);
   lfoShape_.setBounds(lx + 60, kRowY + 88, lw - 72, 15);
@@ -153,9 +155,12 @@ void ImpossibleSpacesEditor::timerCallback() {
   const bool manual = value(ei::id::lfoMode) > 0.5f, lfoSync = value(ei::id::lfoSync) > 0.5f;
   const bool revOn = value(ei::id::revOn) > 0.5f, revSync = value(ei::id::revSync) > 0.5f, gateOn = value(ei::id::gateOn) > 0.5f;
 
-  lfoShape_.setActive(manual); lfoPhase_.setActive(manual); lfoSync_.setActive(manual);
+  const bool lfoOn = value(ei::id::lfoOn) > 0.5f;
+  lfoMode_.setActive(lfoOn); lfoTarget_.setActive(lfoOn); lfoDepth_.setActive(lfoOn); lfoDivision_.setActive(lfoOn);
+  lfoView_.setAlpha(lfoOn ? 1.0f : 0.32f);
+  lfoShape_.setActive(lfoOn && manual); lfoPhase_.setActive(lfoOn && manual); lfoSync_.setActive(lfoOn && manual);
   lfoRate_.setVisible(!(manual && lfoSync)); lfoDivision_.setVisible(manual && lfoSync);
-  lfoRate_.setActive(manual);
+  lfoRate_.setActive(lfoOn && manual);
   revWindow_.setVisible(!revSync); revDivision_.setVisible(revSync);
   revWindow_.setActive(revOn); revDivision_.setActive(revOn); revSync_.setActive(revOn);
   for (ui::Knob* k : {&gateThreshold_, &gateRange_, &gateAttack_, &gateHold_, &gateRelease_}) k->setActive(gateOn);
@@ -166,6 +171,6 @@ void ImpossibleSpacesEditor::timerCallback() {
   const float hz = !manual ? float(bpm / 240.0)
                            : (lfoSync ? float(bpm / 60.0 / double(ei::Lfo::divisionToBeats(juce::roundToInt(value(ei::id::lfoDivision))))) : value(ei::id::lfoRate));
   lfoView_.update(manual ? juce::roundToInt(value(ei::id::lfoShape)) : 0, value(ei::id::lfoDepth) * 0.01f,
-                  manual ? value(ei::id::lfoPhase) / 360.0f : 0.0f, hz, 1.0f / float(kUiHz));
+                  manual ? value(ei::id::lfoPhase) / 360.0f : 0.0f, lfoOn ? hz : 0.0f, 1.0f / float(kUiHz));
   if (revOn != lastRevOn_) { lastRevOn_ = revOn; repaint(kReverse); }
 }

@@ -43,3 +43,17 @@ TEST(EnvelopeFollower_tracksLevel) {
   for (int i = 0; i < 24000; ++i) lvl = e.process(0.0f);
   CHECK(lvl < 0.01f);
 }
+
+// reset() must be instant (the host may call it on the audio thread) yet leave nothing audible behind.
+TEST(DelayLine_resetForgetsOldAudioWithoutClearing) {
+  ei::DelayLine d; d.prepare(1 << 16);
+  for (int i = 0; i < 70000; ++i) d.write(1.0f);
+  d.reset();
+  for (int delay : {0, 1, 100, 5000, 65000}) { CHECK_NEAR(d.readInt(delay), 0.0, 0.0); CHECK_NEAR(d.read(float(delay) + 0.5f), 0.0, 0.0); }
+  d.write(0.5f);
+  CHECK_NEAR(d.readInt(0), 0.5, 1e-9);
+  CHECK_NEAR(d.readInt(1), 0.0, 0.0);
+  for (int i = 0; i < 200; ++i) d.write(0.25f);
+  CHECK_NEAR(d.read(100.5f), 0.25, 1e-6);
+  CHECK_NEAR(d.readInt(5000), 0.0, 0.0);
+}

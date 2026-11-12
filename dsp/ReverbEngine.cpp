@@ -36,17 +36,34 @@ void ReverbEngine::prepare(double sampleRate, int /*maxBlockSize*/) {
   wetFollower_.prepare(sampleRate); wetFollower_.setTimes(0.1f, 10.0f);
   preDelayCoef_ = float(std::exp(-1.0 / (0.05 * sampleRate)));
   fadeCoef_ = float(std::exp(-1.0 / (0.005 * sampleRate)));      // ~20 ms to settle
+  flushLength_ = std::max(16, int(0.005 * sampleRate));
+  lfoFadeCoef_ = float(std::exp(-1.0 / (0.05 * sampleRate)));    // slow: releasing a Size offset too fast is a pitch swoop
   applyParams();
   reset();
 }
 
 void ReverbEngine::reset() {
+  clearState();
+  flushPending_.store(false, std::memory_order_release);
+  flush_ = Flush::Idle; flushPos_ = 0;
+  snap_ = true; meters_ = Meters{};
+}
+
+// Forgets all audio. Cheap enough for the audio thread: the delay lines reset in constant time.
+void ReverbEngine::clearState() {
   for (auto& d : preDelay_) d.reset();
   for (auto& d : dryDelay_) d.reset();
   applyParams();
   fdn_.reset(); tail_.reset(); lfo_.reset(); reverser_.reset(); eq_.reset(); gate_.reset();
   inputFollower_.reset(); activityFollower_.reset(); gateDryFollower_.reset(); wetFollower_.reset();
-  tick_ = 0; snap_ = true; meters_ = Meters{};
+  tick_ = 0;
+}
+
+// Jumps every smoothed value to its target (nothing is sounding, so nothing can click).
+void ReverbEngine::snapSmoothers() {
+  preDelay_s_ = preDelayTarget_; mixDry_ = mixDryTarget_; mixWet_ = mixWetTarget_; outGain_ = outGainTarget_;
+  revMix_ = params_.reverseOn ? 1.0f : 0.0f; gateMix_ = params_.gateOn ? 1.0f : 0.0f; lfoMix_ = params_.lfoOn ? 1.0f : 0.0f;
+  controlTick(0.0f); pan_ = panTarget_;
 }
 
 void ReverbEngine::setTempo(double bpm) {
@@ -100,11 +117,11 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
   const EngineParams& p = params_;
   const float revTarget = p.reverseOn ? 1.0f : 0.0f;
   const float gateTarget = p.gateOn ? 1.0f : 0.0f;
-  if (snap_) {
-    preDelay_s_ = preDelayTarget_; mixDry_ = mixDryTarget_; mixWet_ = mixWetTarget_; outGain_ = outGainTarget_;
-    revMix_ = revTarget; gateMix_ = gateTarget;
-    controlTick(0.0f); pan_ = panTarget_;
-    snap_ = false;
+  const float lfoTarget = p.lfoOn ? 1.0f : 0.0f;
+  if (snap_) { snapSmoothers(); snap_ = false; }
+  if (flushPending_.exchange(false, std::memory_order_acq_rel) && flush_ != Flush::FadingOut) {
+    flushPos_ = flush_ == Flush::FadingIn ? flushLength_ - flushPos_ : 0;     // start from the current gain
+    flush_ = Flush::FadingOut;
   }
   Meters m; m.gateGain = 1.0f;
 
@@ -116,7 +133,8 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
     const float level = inputFollower_.process(inPeak);
     const float hold = tail_.process(activityFollower_.process(inPeak));   // fast detector: the hold starts right as the source stops
     fdn_.setHold(hold);
-    const float lfo = lfo_.process(level * 4.0f);            // the auto LFO is fully ducked from -12 dBFS up
+    approach(lfoMix_, lfoTarget, lfoFadeCoef_);
+    const float lfo = lfo_.process(level * 4.0f) * lfoMix_;  // the auto LFO is fully ducked from -12 dBFS up
     if (tick_ == 0) controlTick(lfo);
     tick_ = (tick_ + 1) % kControlInterval;
 
@@ -166,6 +184,18 @@ void ReverbEngine::process(float* left, float* right, int numSamples) {
     if (pan_ > 0.0f) wl *= 1.0f - pan_; else if (pan_ < 0.0f) wr *= 1.0f + pan_;
 
     wl = wetLimiter(wl); wr = wetLimiter(wr);
+
+    // Flush: raised-cosine fade out, forget everything, fade back in.
+    if (flush_ != Flush::Idle) {
+      const float x = float(flushPos_) / float(flushLength_);
+      const float g = 0.5f + 0.5f * std::cos(3.14159265f * (flush_ == Flush::FadingOut ? x : 1.0f - x));
+      wl *= g; wr *= g;
+      if (++flushPos_ >= flushLength_) {
+        flushPos_ = 0;
+        if (flush_ == Flush::FadingOut) { clearState(); snapSmoothers(); flush_ = Flush::FadingIn; }
+        else flush_ = Flush::Idle;
+      }
+    }
 
     approach(mixDry_, mixDryTarget_, fadeCoef_); approach(mixWet_, mixWetTarget_, fadeCoef_);
     approach(outGain_, outGainTarget_, fadeCoef_);

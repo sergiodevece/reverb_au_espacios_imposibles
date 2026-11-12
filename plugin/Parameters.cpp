@@ -59,6 +59,7 @@ Layout createParameterLayout() {
   addBool(l, id::eq6HighCut, "EQ 6 High-Cut", d.eqBand6HighCut);
 
   // LFO
+  addBool(l, id::lfoOn, "LFO", d.lfoOn);
   addChoice(l, id::lfoMode, "LFO Mode", {"Auto", "Manual"}, int(d.lfoMode));
   addChoice(l, id::lfoShape, "LFO Shape", {"Sine", "Triangle", "Saw", "Square", "Random"}, int(d.lfoShape));
   addFloat(l, id::lfoRate, "LFO Rate", skewed(0.01f, 20.0f, 1.0f), d.lfoRateHz, "Hz", 2);
@@ -99,7 +100,7 @@ ParamReader::ParamReader(juce::AudioProcessorValueTreeState& state) : state_(sta
 #define EI_GET(name) name = get(id::name)
   EI_GET(size); EI_GET(diffusion); EI_GET(damping); EI_GET(pitch); EI_GET(pitchMix); EI_GET(width); EI_GET(freeze);
   EI_GET(preDelay); EI_GET(sustain); EI_GET(release); EI_GET(releaseInf); EI_GET(eq6HighCut);
-  EI_GET(lfoMode); EI_GET(lfoShape); EI_GET(lfoRate); EI_GET(lfoSync); EI_GET(lfoDivision); EI_GET(lfoDepth); EI_GET(lfoPhase); EI_GET(lfoTarget);
+  EI_GET(lfoOn); EI_GET(lfoMode); EI_GET(lfoShape); EI_GET(lfoRate); EI_GET(lfoSync); EI_GET(lfoDivision); EI_GET(lfoDepth); EI_GET(lfoPhase); EI_GET(lfoTarget);
   EI_GET(revOn); EI_GET(revWindow); EI_GET(revSync); EI_GET(revDivision);
   EI_GET(gateOn); EI_GET(gateThreshold); EI_GET(gateAttack); EI_GET(gateHold); EI_GET(gateRelease); EI_GET(gateRange); EI_GET(gateSource);
   EI_GET(mix); EI_GET(output);
@@ -121,6 +122,7 @@ EngineParams ParamReader::read() const {
   e.preDelayMs = f(preDelay); e.sustainSec = f(sustain); e.releaseSec = f(release); e.releaseInfinite = on(releaseInf);
   for (int b = 0; b < 6; ++b) { e.eq[b].on = on(eqOn[b]); e.eq[b].freq = f(eqFreq[b]); e.eq[b].gainDb = f(eqGain[b]); e.eq[b].q = f(eqQ[b]); }
   e.eqBand6HighCut = on(eq6HighCut);
+  e.lfoOn = on(lfoOn);
   e.lfoMode = Lfo::Mode(idx(lfoMode)); e.lfoShape = Lfo::Shape(idx(lfoShape)); e.lfoRateHz = f(lfoRate); e.lfoSync = on(lfoSync);
   e.lfoDivision = idx(lfoDivision); e.lfoDepth = f(lfoDepth) * 0.01f; e.lfoPhaseDeg = f(lfoPhase);
   e.lfoTarget = EngineParams::LfoTarget(idx(lfoTarget));

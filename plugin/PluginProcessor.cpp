@@ -25,7 +25,9 @@ void ImpossibleSpacesProcessor::prepareToPlay(double sampleRate, int samplesPerB
   setLatencySamples(latency);
 }
 
-void ImpossibleSpacesProcessor::reset() { engine_.reset(); }
+// Hosts call this when the transport starts or the cycle jumps, possibly on the audio thread and with the
+// tail still ringing. A hard clear would click, so the engine fades the tail out instead.
+void ImpossibleSpacesProcessor::reset() { engine_.requestFlush(); }
 
 void ImpossibleSpacesProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
   juce::ScopedNoDenormals noDenormals;

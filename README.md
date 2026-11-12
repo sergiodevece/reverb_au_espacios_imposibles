@@ -44,11 +44,11 @@ Qué está comprobado y qué no, sin adornos:
 
 | Aspecto | Estado |
 |---|---|
-| Motor DSP | Verificado con 66 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
+| Motor DSP | Verificado con 71 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
 | Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
 | Validación `auval` | La ejecuta GitHub Actions en cada push |
-| Carga y uso en Logic Pro | **Pendiente**: requiere un Mac con Logic. Ver la [checklist](#validación-en-logic-checklist) |
-| Calidad sonora | **Sin validar por escucha.** El desarrollo se hizo sin poder oír el resultado; el ajuste fino del sonido necesita una ronda de escucha |
+| Carga y uso en Logic Pro | Validado por el autor en su Mac: pasa `auval`, carga en Logic y guarda y recupera los ajustes |
+| Calidad sonora | Primera escucha del autor: cola natural y densa, cambio de tono limpio, nivel correcto. Detectó clics esporádicos al arrancar la reproducción y en modo ciclo; ver [Problemas encontrados](#4-problemas-encontrados-y-cómo-se-resolvieron) |
 
 ## Instalación en Logic Pro
 
@@ -139,6 +139,7 @@ Ecualiza solo la reverb, no la señal seca.
 
 | Control | Qué hace |
 |---|---|
+| **ON/OFF** | Apaga el LFO por completo (con un fundido de unas décimas de segundo, para que no se note el salto) |
 | **AUTO / MANUAL** | AUTO: seno de un compás, sincronizado al tempo; se retira cuando suena la fuente (por encima de −12 dBFS desaparece) y vuelve en las colas. MANUAL: tú decides todo |
 | **SHAPE** | Seno, triángulo, sierra, cuadrada, aleatoria (solo MANUAL) |
 | **TARGET** | Destino: SIZE (±50 %), PITCH (±2 semitonos), DAMP (±50 %) o PAN (de lado a lado) — valores a profundidad máxima |
@@ -220,12 +221,12 @@ dsp/                 Motor en C++17 puro, sin JUCE. Se compila y prueba en cualq
   Gate.h               Puerta
   ReverbEngine.h/.cpp  Encadena todo; es lo único que usa el plugin
 plugin/              Envoltorio JUCE
-  Parameters.*         Los 71 parámetros y su paso al motor
+  Parameters.*         Los 72 parámetros y su paso al motor
   PluginProcessor.*    Audio, estado, latencia, tempo
   PluginEditor.*       Ventana y distribución
   ui/                  Tema, diales, pantallas de envolvente, EQ y LFO
   assets/fonts/        Tipografías incrustadas
-tests/               66 tests del DSP, sin dependencias externas
+tests/               71 tests del DSP, sin dependencias externas
 .github/workflows/   Compilación y validación automáticas
 docs/                Spec de diseño y plan de implementación
 ```
@@ -308,6 +309,7 @@ Qué miden los tests más relevantes:
 - **Sustain**: el nivel a 1,5 s es el mismo que a 0,5 s, y a los 4 s ha caído más de 40 dB. Con señal continua, el sustain no sube el nivel; con golpes repetidos, sube menos de 12 dB.
 - **La cola siempre termina**: con cualquier valor de Damping, de −100 a +100 %, cae más de 60 dB.
 - **Estabilidad**: 10 s de ruido a 0 dBFS con cada combinación extrema de tamaño, damping y tono; y 20 s cambiando *todos* los parámetros al azar en cada bloque. Nunca un valor no finito ni fuera de rango.
+- **Reinicio del host**: con la cola sonando, un vaciado no produce clic y 50 ms después no queda nada del sonido anterior.
 - **Silencio**: tras la cola, la salida llega a cero exacto (sin denormales que disparen la CPU).
 - **Independencia del tamaño de bloque**: el mismo audio procesado en bloques de 1, 64, 480 o tamaños aleatorios da el mismo resultado.
 - **Frecuencias de muestreo**: a 44,1, 96 y 192 kHz los tiempos se mantienen en segundos.
@@ -329,6 +331,8 @@ Qué miden los tests más relevantes:
 - **(Revisión) Reactivar REVERSE soltaba audio antiguo** que se había quedado en su búfer. Ahora el inversor se alimenta siempre.
 - **(Revisión) La latencia se comunicaba al host desde el hilo de audio.** Ahora se hace desde el hilo de mensajes y solo cuando el valor se estabiliza.
 - **(Revisión) El EQ cambiaba de golpe.** Ahora cada cambio se desliza en 20 ms.
+- **(Primera escucha) Clics al arrancar la reproducción y en modo ciclo.** En reproducción continua el motor no produce discontinuidades (medido con señales suaves y con ruido). El problema estaba en el reinicio que pide el host al arrancar o al saltar el ciclo: el plugin cortaba la cola en seco y además borraba unos 17 MB de retardos en el hilo de audio, lo bastante lento como para provocar un corte con búferes pequeños. Ahora el reinicio es instantáneo (los retardos no se borran: lo antiguo simplemente deja de poder leerse) y la cola se funde en 5 ms en vez de cortarse. *Pendiente de confirmar por escucha que los clics han desaparecido.*
+- **Una pista falsa.** Al investigar los clics pareció que cambiar SIZE de golpe producía un estallido de nivel. Era un artefacto de medir con un tono puro (las resonancias de la sala se desplazan); con ruido no hay ni estallido ni clic. Se descartó el arreglo que se había empezado a escribir.
 - **El primer run de CI se canceló** al instante: la etiqueta `macos-14` ya no tenía runner. Se cambió a `macos-latest`.
 
 ### 5. Interfaz
@@ -360,7 +364,7 @@ Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-I
 
 El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
-1. **dsp-tests** (Ubuntu): compila y pasa los 66 tests.
+1. **dsp-tests** (Ubuntu): compila y pasa los 71 tests.
 2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
 
 ### Identidad del plugin
@@ -383,7 +387,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 - [ ] La pantalla muestra la entrada y la reverb moviéndose
 - [ ] Arrastrar PRE, SUS y REL cambia el sonido; doble clic en REL da cola infinita
 - [ ] El EQ se oye y la curva corresponde
-- [ ] LFO en AUTO y en MANUAL, con los cuatro destinos
+- [ ] LFO en AUTO y en MANUAL, con los cuatro destinos, y apagado con ON/OFF
 - [ ] REVERSE: suena invertido y la señal seca sigue a tempo
 - [ ] GATE con fuente DRY sobre una caja: la cola se corta
 - [ ] FREEZE mantiene el sonido
@@ -394,7 +398,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
 ## Limitaciones conocidas
 
-- **Sonido sin validar por escucha.** Lo más probable es que haga falta retocar constantes: densidad de la cola, carácter del cambio de tono, respuesta del damping positivo.
+- **Al arrancar la reproducción o saltar el ciclo, Logic vacía la cola de la reverb** (se funde en 5 ms). Es el comportamiento estándar de un efecto, pero significa que la cola no continúa de una vuelta del ciclo a la siguiente.
 - **El cambio de tono es granular**: con material muy tonal y sostenido puede oírse un ligero trémolo a 60 ms.
 - **Solo 4 de las 16 líneas** llevan cambio de tono, por coste de CPU.
 - **Cambiar WINDOW con el inversor en marcha**: la nueva longitud se aplica al terminar el tramo en curso, y en ese momento puede oírse un clic en la señal seca.
@@ -403,6 +407,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 - **El aviso de latencia a Logic** llega con hasta 0,2 s de retraso al activar REVERSE o cambiar la ventana.
 - **En bypass con REVERSE activo** la señal no se retrasa lo que el plugin declara de latencia.
 - **Memoria**: unos 17 MB por instancia a 48 kHz y unos 67 MB a 192 kHz, por los retardos de hasta 3 s.
+- **CPU**: en las pruebas, alrededor del 3 % de un núcleo con todo activado (medido en Linux, no en un Mac).
 - **Sin presets de fábrica**, sin VST3/AAX, sin entrada de sidechain externa y con ventana de tamaño fijo (1000×640).
 - **Sin firmar ni notarizar**: hace falta el paso de la cuarentena.
 
