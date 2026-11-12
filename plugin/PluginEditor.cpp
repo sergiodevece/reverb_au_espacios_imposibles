@@ -13,7 +13,7 @@ const int kUiHz = 30;
 
 ImpossibleSpacesEditor::ImpossibleSpacesEditor(ImpossibleSpacesProcessor& p)
     : AudioProcessorEditor(&p), processor_(p), state_(p.apvts),
-      envelope_(state_), eq_(state_), eqBand6Mode_(state_, ei::id::eq6HighCut, {"6 SHELF", "6 CUT"}),
+      envelope_(state_), eq_(state_), eqBand6Mode_(state_, ei::id::eq6HighCut, {"SHELF", "CUT"}),
       size_(state_, ei::id::size, "SIZE"), diffusion_(state_, ei::id::diffusion, "DIFFUSION"),
       damping_(state_, ei::id::damping, "DAMPING", true), width_(state_, ei::id::width, "WIDTH"),
       pitch_(state_, ei::id::pitch, "PITCH", true), pitchMix_(state_, ei::id::pitchMix, "PITCH MIX"),
@@ -50,7 +50,7 @@ float ImpossibleSpacesEditor::value(const char* paramId) const { return state_.g
 void ImpossibleSpacesEditor::resized() {
   envelope_.setBounds(kEnvelope);
   eq_.setBounds(kEq);
-  eqBand6Mode_.setBounds(kEq.getX() + 116, kEq.getBottom() - 23, 98, 15);
+  eqBand6Mode_.setBounds(kEq.getX() + 208, kEq.getBottom() - 23, 78, 15);   // sits under band 6, between the 1k and 10k labels
 
   // Space
   const float sx[4] = {kSpace.getX() + 46.0f, kSpace.getX() + 120.0f, kSpace.getX() + 194.0f, kSpace.getX() + 268.0f};

@@ -6,7 +6,7 @@
 
 **Architecture:** El DSP vive en `dsp/` como C++17 puro sin JUCE, orquestado por `ReverbEngine`, y se prueba en Linux con un ejecutable CTest sin dependencias. `plugin/` envuelve el motor con JUCE 8 (parámetros, estado, interfaz). GitHub Actions en macOS compila el AU, pasa `auval` y publica el `.component`.
 
-**Tech Stack:** C++17, CMake ≥ 3.22, JUCE 8.0.4 (FetchContent, solo si `EI_BUILD_PLUGIN=ON`), GitHub Actions `macos-14`.
+**Tech Stack:** C++17, CMake ≥ 3.22, JUCE 8.0.4 (FetchContent, solo si `EI_BUILD_PLUGIN=ON`), GitHub Actions `macos-latest`.
 
 **Spec:** `docs/superpowers/specs/2026-11-12-reverb-espacios-imposibles-design.md`
 
@@ -313,7 +313,7 @@ public:
 **Decisiones:**
 - Disparadores: `push` a cualquier rama y `workflow_dispatch`.
 - Job `dsp-tests` (`ubuntu-latest`): comando de tests de Global Constraints.
-- Job `macos-au` (`macos-14`): `cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0`; `cmake --build build --config Release`; tests del DSP; copiar el `.component` a `~/Library/Audio/Plug-Ins/Components/`; `killall -9 AudioComponentRegistrar || true`; `auval -v aufx ImSp Vita`; `lipo -archs` sobre el binario para confirmar `x86_64 arm64`; firma ad-hoc `codesign --force --deep -s -`; empaquetar con `ditto -c -k --keepParent` y subir `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip` con `actions/upload-artifact@v4`.
+- Job `macos-au` (`macos-latest`): `cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0`; `cmake --build build --config Release`; tests del DSP; copiar el `.component` a `~/Library/Audio/Plug-Ins/Components/`; `killall -9 AudioComponentRegistrar || true`; `auval -v aufx ImSp Vita`; `lipo -archs` sobre el binario para confirmar `x86_64 arm64`; firma ad-hoc `codesign --force --deep -s -`; empaquetar con `ditto -c -k --keepParent` y subir `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip` con `actions/upload-artifact@v4`.
 
 - [ ] **Step 1: Escribir el workflow, commit y push.**
 - [ ] **Step 2: Vigilar la ejecución** (herramientas de GitHub Actions) y corregir hasta que ambos jobs estén en verde. Criterio: `auval` termina con `AU VALIDATION SUCCEEDED`.
