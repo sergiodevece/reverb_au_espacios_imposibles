@@ -15,11 +15,11 @@
 - Todo el DSP en `namespace ei`, cabeceras en `dsp/`, sin incluir JUCE.
 - Ninguna reserva de memoria, bloqueo ni E/S en el camino de audio (`process*`); toda la memoria se reserva en `prepare`.
 - Frecuencias de muestreo soportadas: 44,1–192 kHz. Tamaños de bloque: de 1 a 8192 muestras.
-- Identidad del plugin: nombre `Espacios Imposibles`, fabricante `SDevece`, código de fabricante `Sdev`, código de plugin `EsIm`, tipo AU `aufx`, bundle id `com.sdevece.espaciosimposibles`.
+- Identidad del plugin: nombre `Impossible Spaces`, fabricante `VitaPlug`, código de fabricante `Vita`, código de plugin `ImSp`, tipo AU `aufx`, bundle id `com.vitaplug.impossiblespaces`, target CMake `ImpossibleSpaces`.
 - Formatos: `AU` y `Standalone`. Binario universal `arm64;x86_64`, macOS mínimo 11.0.
 - IDs, rangos y valores por defecto de los parámetros: los de la sección 5 de la spec, literalmente.
 - La salida del motor debe ser finita y con |x| ≤ 8.0 para cualquier combinación de parámetros con entrada |x| ≤ 1.
-- Textos de interfaz y README en español. Mensajes de commit en inglés.
+- Rótulos de interfaz en inglés; README en español. Diseño visual: maqueta aprobada (negro + verde, ver sección 6 de la spec). Mensajes de commit en inglés.
 - Tests: `cmake -B build -DEI_BUILD_PLUGIN=OFF && cmake --build build && ctest --test-dir build --output-on-failure`.
 
 ## Review Focus
@@ -268,7 +268,7 @@ public:
   - `juce::AudioProcessorValueTreeState::ParameterLayout ei::createParameterLayout();`
   - `ei::EngineParams ei::readParams(const juce::AudioProcessorValueTreeState&);`
   - IDs de parámetros (cadenas estables, no cambiarlas nunca): `size, diffusion, damping, pitch, pitchMix, width, freeze, preDelay, sustain, release, releaseInf, eq{1..6}On, eq{1..6}Freq, eq{1..6}Gain, eq{1..6}Q, eq6HighCut, lfoMode, lfoShape, lfoRate, lfoSync, lfoDivision, lfoDepth, lfoPhase, lfoTarget, revOn, revWindow, revSync, revDivision, gateOn, gateThreshold, gateAttack, gateHold, gateRelease, gateRange, gateSource, mix, output`.
-  - `class EspaciosImposiblesProcessor : public juce::AudioProcessor` con `apvts` público y `struct MeterFrame { float in, wet, gateGain, lfo, hold; }` expuesto mediante `bool popMeterFrame(MeterFrame&)` (cola `juce::AbstractFifo` de 512 entradas, una por bloque).
+  - `class ImpossibleSpacesProcessor : public juce::AudioProcessor` con `apvts` público y `struct MeterFrame { float in, wet, gateGain, lfo, hold; }` expuesto mediante `bool popMeterFrame(MeterFrame&)` (cola `juce::AbstractFifo` de 512 entradas, una por bloque).
 - Decisiones:
   - Buses: entrada y salida estéreo; se acepta también mono→estéreo. `isBusesLayoutSupported` rechaza el resto.
   - Tempo desde `getPlayHead()->getPosition()->getBpm()`; si no hay, 0 (el motor recurre a 120).
@@ -280,7 +280,7 @@ public:
   - Hasta la Task 11, `createEditor()` devuelve `juce::GenericAudioProcessorEditor`.
 
 - [ ] **Step 1: Escribir** `Parameters.*` y `PluginProcessor.*` y el CMake (`juce_add_plugin` con los valores de Global Constraints, `COPY_PLUGIN_AFTER_BUILD TRUE`).
-- [ ] **Step 2: Comprobación de compilación en Linux (mejor esfuerzo):** `cmake -B build-plugin -DEI_BUILD_PLUGIN=ON -DEI_LINUX_COMPILE_CHECK=ON && cmake --build build-plugin --target EspaciosImposibles_Standalone`. Con `EI_LINUX_COMPILE_CHECK` los formatos son solo `Standalone`. Si las dependencias de JUCE en Linux no pueden instalarse, se anota y la verificación de compilación pasa a la Task 12.
+- [ ] **Step 2: Comprobación de compilación en Linux (mejor esfuerzo):** `cmake -B build-plugin -DEI_BUILD_PLUGIN=ON -DEI_LINUX_COMPILE_CHECK=ON && cmake --build build-plugin --target ImpossibleSpaces_Standalone`. Con `EI_LINUX_COMPILE_CHECK` los formatos son solo `Standalone`. Si las dependencias de JUCE en Linux no pueden instalarse, se anota y la verificación de compilación pasa a la Task 12.
 - [ ] **Step 3: Tests del DSP siguen en verde.**
 - [ ] **Step 4: Commit** `feat: JUCE processor and parameter layout`.
 
@@ -292,7 +292,7 @@ public:
 
 **Interfaces:**
 - Consumes: `apvts`, `popMeterFrame`, `engine.eq().magnitudeDb`, IDs de la Task 10.
-- Produces: `class EspaciosImposiblesEditor : public juce::AudioProcessorEditor, private juce::Timer` — 1000×640, no redimensionable, temporizador a 30 Hz.
+- Produces: `class ImpossibleSpacesEditor : public juce::AudioProcessorEditor, private juce::Timer` — 1000×640, no redimensionable, temporizador a 30 Hz.
 - Decisiones:
   - `Theme.h`: fondo `#0E1016`, panel `#171A23`, texto `#E6E8EE`, acento (envolvente) `#7C5CFF`, entrada `#3DD6C6`, reverb `#FF7A59`, puerta `#F2C94C`.
   - Distribución: fila superior = `EnvelopeDisplay` (620×300) + `EqDisplay` (360×300). Fila inferior = cinco secciones: Espacio, LFO, Inversor, Puerta, Salida.
@@ -313,7 +313,7 @@ public:
 **Decisiones:**
 - Disparadores: `push` a cualquier rama y `workflow_dispatch`.
 - Job `dsp-tests` (`ubuntu-latest`): comando de tests de Global Constraints.
-- Job `macos-au` (`macos-14`): `cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0`; `cmake --build build --config Release`; tests del DSP; copiar el `.component` a `~/Library/Audio/Plug-Ins/Components/`; `killall -9 AudioComponentRegistrar || true`; `auval -v aufx EsIm Sdev`; `lipo -archs` sobre el binario para confirmar `x86_64 arm64`; firma ad-hoc `codesign --force --deep -s -`; empaquetar con `ditto -c -k --keepParent` y subir `EspaciosImposibles-AU.zip` y `EspaciosImposibles-Standalone.zip` con `actions/upload-artifact@v4`.
+- Job `macos-au` (`macos-14`): `cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0`; `cmake --build build --config Release`; tests del DSP; copiar el `.component` a `~/Library/Audio/Plug-Ins/Components/`; `killall -9 AudioComponentRegistrar || true`; `auval -v aufx ImSp Vita`; `lipo -archs` sobre el binario para confirmar `x86_64 arm64`; firma ad-hoc `codesign --force --deep -s -`; empaquetar con `ditto -c -k --keepParent` y subir `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip` con `actions/upload-artifact@v4`.
 
 - [ ] **Step 1: Escribir el workflow, commit y push.**
 - [ ] **Step 2: Vigilar la ejecución** (herramientas de GitHub Actions) y corregir hasta que ambos jobs estén en verde. Criterio: `auval` termina con `AU VALIDATION SUCCEEDED`.
@@ -333,7 +333,7 @@ public:
 Requiere el Mac del autor. Se intenta conectar la sesión a su Mac (Remote Control); si no es posible, el autor ejecuta los pasos y comunica los resultados.
 
 - [ ] **Step 1: Instalar** el `.component` del artefacto de CI en `~/Library/Audio/Plug-Ins/Components/` y quitar la cuarentena.
-- [ ] **Step 2: Validar** con `auval -v aufx EsIm Sdev` en el Mac → `AU VALIDATION SUCCEEDED`.
-- [ ] **Step 3: Logic Pro**: reescanear en *Ajustes → Gestor de plug-ins*; comprobar que aparece en *Audio Units → SDevece → Espacios Imposibles* y que carga en una pista estéreo.
+- [ ] **Step 2: Validar** con `auval -v aufx ImSp Vita` en el Mac → `AU VALIDATION SUCCEEDED`.
+- [ ] **Step 3: Logic Pro**: reescanear en *Ajustes → Gestor de plug-ins*; comprobar que aparece en *Audio Units → VitaPlug → Impossible Spaces* y que carga en una pista estéreo.
 - [ ] **Step 4: Checklist funcional**: suena con los valores por defecto · la pantalla muestra entrada y reverb · arrastrar pre-delay/sustain/release cambia el sonido · EQ audible y curva coherente · LFO auto y manual · inversor (y compensación de latencia: el dry sigue a tempo) · puerta con fuente Dry sobre una caja · automatización de un parámetro · guardar y reabrir el proyecto conserva el estado · bounce offline sin fallos · uso de CPU razonable.
 - [ ] **Step 5: Recoger impresiones de sonido** y abrir una ronda de ajustes si hace falta (nueva tarea, fuera de este plan).
