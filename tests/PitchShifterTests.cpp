@@ -24,6 +24,16 @@ TEST(Pitch_fifthDown) {
   double f; float o, i; runSine(-7, 440, f, o, i);
   CHECK_NEAR(f, 293.66, 293.66 * 0.03);
 }
+TEST(Pitch_twoOctavesUp) {
+  double f; float o, i; runSine(24, 220, f, o, i);
+  CHECK_NEAR(f, 880.0, 880.0 * 0.03);
+  CHECK_NEAR(o, i, 3.0);
+}
+TEST(Pitch_twoOctavesDown) {
+  double f; float o, i; runSine(-24, 880, f, o, i);
+  CHECK_NEAR(f, 220.0, 220.0 * 0.03);
+  CHECK_NEAR(o, i, 3.0);
+}
 TEST(Pitch_unityGain) {
   for (float st : {12.0f, -7.0f, 3.0f, -12.0f}) {
     double f; float o, i; runSine(st, 440, f, o, i);

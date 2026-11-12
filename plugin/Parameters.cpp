@@ -37,7 +37,7 @@ Layout createParameterLayout() {
   addFloat(l, id::diffusion, "Diffusion", Range(0.0f, 100.0f), d.diffusion * 100.0f, "%", 0);
   addFloat(l, id::density, "Density", Range(0.0f, 100.0f), d.density * 100.0f, "%", 0);
   addFloat(l, id::damping, "Damping", Range(-100.0f, 100.0f), d.damping * 100.0f, "%", 0);
-  addFloat(l, id::pitch, "Pitch", Range(-12.0f, 12.0f, 0.01f), d.pitch, "st", 2);
+  addFloat(l, id::pitch, "Pitch", Range(-24.0f, 24.0f, 0.01f), d.pitch, "st", 2);
   addFloat(l, id::pitchMix, "Pitch Mix", Range(0.0f, 100.0f), d.pitchMix * 100.0f, "%", 0);
   addFloat(l, id::width, "Width", Range(0.0f, 200.0f), d.width * 100.0f, "%", 0);
   addBool(l, id::freeze, "Freeze", d.freeze);

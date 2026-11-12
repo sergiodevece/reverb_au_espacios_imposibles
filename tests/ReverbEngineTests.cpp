@@ -139,7 +139,7 @@ TEST(Engine_automationSweepsAreSafe) {
   ei::EngineParams p; bool finite = true; float peak = 0;
   std::vector<float> l(256), r(256);
   for (int b = 0; b < 20 * 48000 / 256; ++b) {
-    p.size = 1 + 999 * u(rng); p.diffusion = u(rng); p.damping = s(rng); p.pitch = 12 * s(rng); p.pitchMix = u(rng); p.width = 2 * u(rng);
+    p.size = 1 + 999 * u(rng); p.diffusion = u(rng); p.damping = s(rng); p.pitch = 24 * s(rng); p.pitchMix = u(rng); p.width = 2 * u(rng);
     p.freeze = u(rng) < 0.05f; p.preDelayMs = 500 * u(rng); { float t = 0; for (auto& pt : p.tail) { t += 20 * u(rng) * u(rng); pt.time = u(rng) < 0.1f ? 60 * u(rng) : t; pt.levelDb = -60 + 72 * u(rng); } }   // includes out-of-order points
     for (auto& band : p.eq) { band.on = u(rng) < 0.8f; band.freq = 20 * std::pow(1000.0f, u(rng)); band.gainDb = 18 * s(rng); band.q = 0.1f + 9.9f * u(rng); }
     p.eqBand6HighCut = u(rng) < 0.5f;
@@ -356,7 +356,7 @@ TEST(Engine_envelopeExtremesStayBounded) {
       {{60.0f, 0.0f}, {30.0f, -60.0f}, {10.0f, 12.0f}, {0.0f, 0.0f}, {5.0f, 5.0f}}};          // out of order
   for (auto& shape : shapes) {
     ei::ReverbEngine e; e.prepare(48000, 256);
-    ei::EngineParams p; p.mix = 1; p.attackSec = 2; p.damping = 1; p.pitch = 12; p.pitchMix = 1; p.density = 1;
+    ei::EngineParams p; p.mix = 1; p.attackSec = 2; p.damping = 1; p.pitch = 24; p.pitchMix = 1; p.density = 1;
     for (int i = 0; i < 5; ++i) p.tail[i] = shape[i];
     e.setParams(p); e.reset();
     bool finite = true; float peak = 0; std::vector<float> l(256), r(256);

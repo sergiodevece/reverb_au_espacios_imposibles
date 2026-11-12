@@ -10,6 +10,7 @@ namespace ei {
 class PitchShifter {
 public:
   static constexpr float kGrainMs = 60.0f;
+  static constexpr float kMaxSemitones = 24.0f;        // two octaves each way
 
   void prepare(double sampleRate) {
     grain_ = float(kGrainMs * 0.001 * sampleRate);
@@ -22,7 +23,7 @@ public:
 
   void setSemitones(float st) {
     if (!std::isfinite(st)) st = 0.0f;
-    semis_ = std::clamp(st, -12.0f, 12.0f);
+    semis_ = std::clamp(st, -kMaxSemitones, kMaxSemitones);
     float ratio = std::pow(2.0f, semis_ / 12.0f);
     inc_ = (1.0f - ratio) / grain_;          // delay shrinks when pitching up
   }

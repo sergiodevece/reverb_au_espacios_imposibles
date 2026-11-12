@@ -157,7 +157,7 @@ Ecualiza solo la reverb, no la señal seca.
 | **DENSITY** | 0–100 % | 50 % | Textura de toda la cola. 0 %: rebotes sueltos que se repiten sin mezclarse. 50 %: la red normal. 100 %: más densa, con difusores dentro del propio bucle. Para ecos realmente separados, baja también DIFFUSION |
 | **DAMPING** | −100…+100 % | −30 % | Negativo: los agudos mueren antes y la cola se oscurece. Positivo: mueren antes los graves y la cola se va quedando en puro brillo (imposible en una sala real) |
 | **WIDTH** | 0–200 % | 100 % | Anchura estéreo; 0 = mono |
-| **PITCH** | ±12 semitonos | 0 | Cambio de tono dentro de la realimentación: la cola sube o baja un poco más en cada vuelta |
+| **PITCH** | ±24 semitonos (dos octavas) | 0 | Cambio de tono dentro de la realimentación: la cola sube o baja un poco más en cada vuelta |
 | **PITCH MIX** | 0–100 % | 0 % | Cuánta realimentación pasa por el cambio de tono. A 0, PITCH no hace nada |
 | **FREEZE** | on/off | off | Congela lo que haya dentro: deja de entrar señal y nada decae |
 
@@ -214,6 +214,7 @@ Puntos de partida, no verdades absolutas (recuerda: están sin escuchar).
 |---|---|
 | **Catedral infinita** | SIZE 150 m · DAMPING −20 % · los cinco puntos arriba, en 0 dB (el 5 no baja: cola infinita). Cada nota se suma a las anteriores |
 | **Shimmer ascendente** | PITCH +12 · PITCH MIX 30–50 % · DAMPING −40 % · puntos en caída suave hasta los 8 s |
+| **Batería mutante** | SIZE 3–8 m · PITCH entre ±12 y ±24 · PITCH MIX 50–80 % · caída corta (punto 5 en 0,5–1 s): cada golpe deja una estela que sube o baja de tono |
 | **Abismo** | PITCH −5 · PITCH MIX 60 % · SIZE 300 m · DAMPING −60 % |
 | **Reverb inversa** | REVERSE ON · WINDOW SYNC 1/4 · caída corta (punto 5 en 1,5 s) · MIX 100 % en un auxiliar |
 | **Gated de los 80** | GATE ON · SOURCE DRY · THRESHOLD ajustado a la caja · HOLD 150 ms · RELEASE 30 ms · SIZE 40 m |
@@ -399,6 +400,7 @@ En la segunda escucha el autor confirmó que los clics habían desaparecido y pi
 
 - **Puntos realmente libres.** Los de la primera versión dependían unos de otros (mover uno desplazaba a los siguientes) y cada uno solo se movía en una dirección. Se sustituyó todo el esquema de sustain y release por una curva de cinco puntos libres en tiempo y nivel. La objeción inicial a una curva libre era la automatización; se resolvió fijando el número de puntos en cinco: así cada punto son dos parámetros normales, que Logic graba en modo Touch. Contrapartida asumida: los proyectos guardados con la versión anterior pierden sus ajustes de sustain y release.
 - **Control de densidad**, tanto para hacer la cola más densa como para dejarla en ecos sueltos.
+- **PITCH hasta ±24 semitonos** (antes ±12), tras descubrir el efecto que hace sobre baterías con salas muy cortas.
 
 ### 6. Interfaz
 
@@ -468,7 +470,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 ## Limitaciones conocidas
 
 - **Al arrancar la reproducción o saltar el ciclo, Logic vacía la cola de la reverb** (se funde en 5 ms). Es el comportamiento estándar de un efecto, pero significa que la cola no continúa de una vuelta del ciclo a la siguiente.
-- **El cambio de tono es granular**: con material muy tonal y sostenido puede oírse un ligero trémolo a 60 ms.
+- **El cambio de tono es granular**: con material muy tonal y sostenido puede oírse un ligero trémolo a 60 ms, más evidente cuanto mayor es el salto (a ±24 semitonos es parte del carácter).
 - **DENSITY alto con SIZE muy pequeño** puede dar un timbre metálico: es propio de los difusores dentro del bucle. Pendiente de valorar por escucha.
 - **Por encima del 50 % de DENSITY, el efecto es sutil si DIFFUSION ya está alto**, porque la cola ya nace densa; se nota más en los primeros 100 ms.
 - **Solo 4 de las 16 líneas** llevan cambio de tono, por coste de CPU.

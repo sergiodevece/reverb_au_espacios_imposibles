@@ -70,7 +70,7 @@ TEST(Fdn_freezeIgnoresInput) {
 
 TEST(Fdn_boundedAtExtremes) {
   std::mt19937 rng(2); std::uniform_real_distribution<float> u(-1, 1);
-  for (float size : {1.0f, 1000.0f}) for (float damp : {-1.0f, 1.0f}) for (float pitch : {-12.0f, 12.0f}) {
+  for (float size : {1.0f, 1000.0f}) for (float damp : {-1.0f, 1.0f}) for (float pitch : {-24.0f, 24.0f}) {
     ei::Fdn f; f.prepare(kSr);
     f.setSize(size); f.setDamping(damp); f.setPitch(pitch, 1.0f); f.setRelease(60.0f, true); f.setHold(1.0f); f.setWidth(2.0f);
     float peak = 0; bool finite = true;
