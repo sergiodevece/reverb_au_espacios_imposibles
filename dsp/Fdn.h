@@ -21,7 +21,9 @@ public:
   void setDamping(float bipolar);                // -1: highs die first (darkens). +1: lows die first (brightens)
   void setPitch(float semitones, float mix01);
   void setRelease(float rt60Seconds, bool infinite);
-  void setHold(float hold01);                    // 1 = unity feedback (sustain)
+  void setHold(float hold01);                    // 1 = sustaining: feedback follows the hold rate, damping is off
+  void setHoldRate(float dbPerSecond);           // level change while held: 0 = frozen, + sinks, - grows (Bender)
+  void setReleaseScale(float scale);             // multiplies the release decay rate (release curve)
   void setFreeze(bool on);
   void setWidth(float width);                    // 0 mono .. 2 extra wide
 
@@ -45,7 +47,7 @@ private:
   std::array<DelayLine, kLines> lines_;
   std::array<PitchShifter, kPitchLines> shifters_;
   std::array<std::array<Allpass, 4>, 2> diffusers_;
-  std::array<float, kLines> base_{}, baseInc_{}, gain_{}, lp_{}, shelf_{};
+  std::array<float, kLines> base_{}, baseInc_{}, gain_{}, holdGain_{}, lp_{}, shelf_{};
   int tick_ = 0;
   bool settled_ = false;
 
@@ -55,7 +57,7 @@ private:
   float lpCoef_ = 0, lpBlend_ = 0, shelfCoef_ = 0, shelfGain_ = 0;
   float pitchMixTarget_ = 0, pitchMix_ = 0;
   float rt60_ = 4; bool infinite_ = false;
-  float hold_ = 0;
+  float hold_ = 0, holdRate_ = 0, releaseScale_ = 1;
   float freezeTarget_ = 0, freeze_ = 0, freezeCoef_ = 0;
   float maxDelay_ = 0;
 };

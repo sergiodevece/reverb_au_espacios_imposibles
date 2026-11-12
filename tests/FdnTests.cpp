@@ -129,3 +129,22 @@ TEST(Fdn_tailDecaysAcrossDampingRange) {
   }
 }
 
+
+// Bender: while held, the level can be made to sink or to grow at a set rate.
+TEST(Fdn_holdRateBendsTheSustain) {
+  for (float rate : {6.0f, -3.0f}) {                       // dB per second; negative = the tail grows
+    ei::Fdn f; f.prepare(kSr); f.setSize(30); f.setDamping(0); f.setRelease(1.0f, false); f.setHold(1.0f); f.setHoldRate(rate);
+    std::vector<float> y; float l, r;
+    for (int i = 0; i < int(3.6 * kSr); ++i) { float x = i == 0 ? 0.05f : 0.0f; f.process(x, x, l, r); y.push_back(l); }
+    float a = th::rmsDb(y, int(1.0 * kSr), 24000), b = th::rmsDb(y, int(3.0 * kSr), 24000);
+    CHECK_NEAR(a - b, 2.0 * rate, 1.5);
+  }
+}
+TEST(Fdn_releaseScaleSpeedsUpOrSlowsTheDecay) {
+  ei::Fdn f; f.prepare(kSr); f.setSize(30); f.setDamping(0); f.setRelease(2.0f, false); f.setReleaseScale(2.0f);
+  auto y = impulseResponse(f, 1.5);
+  CHECK_NEAR(measureRt60(y, kSr, 0.25, 0.8), 1.0, 0.2);
+  ei::Fdn g; g.prepare(kSr); g.setSize(30); g.setDamping(0); g.setRelease(2.0f, false); g.setReleaseScale(0.5f);
+  auto z = impulseResponse(g, 4.5);
+  CHECK_NEAR(measureRt60(z, kSr, 1.0, 3.2), 4.0, 0.8);
+}

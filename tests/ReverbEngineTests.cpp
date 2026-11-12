@@ -306,3 +306,56 @@ TEST(Engine_lfoToggleDoesNotClick) {
   CHECK(after < 1.5 * before);
   CHECK(levelAt(out, 48000, double(at) / 48000 + 0.01, 0.05) < levelAt(out, 48000, double(at) / 48000 - 0.06, 0.05) + 3.0f);
 }
+
+// --- Attack / Bender / Curve ---
+TEST(Engine_attackSoftensTheOnset) {
+  auto in = noiseBurst(48000, 2.0, 2.0, 5, 0.2f);
+  Rig plain; plain.p.preDelayMs = 0; plain.e.setParams(plain.p); plain.e.reset();
+  Rig slow; slow.p.preDelayMs = 0; slow.p.attackSec = 0.5f; slow.e.setParams(slow.p); slow.e.reset();
+  auto a = plain.run(in), b = slow.run(in);
+  CHECK(levelAt(b, 48000, 0.03, 0.05) < levelAt(a, 48000, 0.03, 0.05) - 12.0f);
+  CHECK_NEAR(levelAt(b, 48000, 1.5, 0.3), levelAt(a, 48000, 1.5, 0.3), 3.0);
+}
+
+TEST(Engine_benderBendsTheSustain) {
+  auto in = noiseBurst(48000, 0.3, 3.0, 6, 0.02f);              // quiet, so a growing tail stays far from the limiter
+  auto change = [&](float bend) {
+    Rig r; r.p.sustainSec = 2; r.p.sustainBendDb = bend; r.p.releaseSec = 4; r.e.setParams(r.p); r.e.reset();
+    auto y = r.run(in);
+    return levelAt(y, 48000, 2.1, 0.2) - levelAt(y, 48000, 0.5, 0.2);   // 1.6 s apart, inside the sustain
+  };
+  CHECK_NEAR(change(0.0f), 0.0, 1.5);
+  CHECK_NEAR(change(-12.0f), -9.6, 3.0);
+  CHECK_NEAR(change(6.0f), 4.8, 3.0);
+}
+
+TEST(Engine_curveShapesTheRelease) {
+  auto in = noiseBurst(48000, 0.3, 3.0, 7, 0.2f);
+  auto drops = [&](float curve, double at) {
+    Rig r; r.p.releaseSec = 2; r.p.releaseCurve = curve; r.p.damping = 0; r.e.setParams(r.p); r.e.reset();
+    auto y = r.run(in);
+    return levelAt(y, 48000, 0.36, 0.05) - levelAt(y, 48000, 0.36 + at, 0.05);
+  };
+  CHECK_NEAR(drops(0.0f, 0.5), 15.0, 4.0);       // plain exponential: 60 dB in 2 s
+  CHECK(drops(1.0f, 0.5) < 6.0);                 // holds on...
+  CHECK(drops(1.0f, 2.1) > 45.0);                // ...then collapses
+  CHECK(drops(-1.0f, 0.5) > 25.0);               // falls away at once...
+  CHECK(drops(-1.0f, 2.1) > 45.0);
+}
+
+TEST(Engine_envelopeExtremesStayBounded) {
+  std::mt19937 rng(17); std::uniform_real_distribution<float> u(-1, 1);
+  for (float bend : {-24.0f, 12.0f}) for (float curve : {-1.0f, 1.0f}) {
+    ei::ReverbEngine e; e.prepare(48000, 256);
+    ei::EngineParams p; p.mix = 1; p.sustainSec = 10; p.sustainBendDb = bend; p.releaseCurve = curve; p.attackSec = 2; p.releaseSec = 60; p.damping = 1; p.pitch = 12; p.pitchMix = 1;
+    e.setParams(p); e.reset();
+    bool finite = true; float peak = 0; std::vector<float> l(256), r(256);
+    for (int b = 0; b < 30 * 48000 / 256; ++b) {
+      const bool playing = (b / 400) % 2 == 0;                        // ~2 s on, ~2 s off: sustain and release keep retriggering
+      for (int i = 0; i < 256; ++i) { l[i] = playing ? u(rng) : 0.0f; r[i] = l[i]; }
+      e.process(l.data(), r.data(), 256);
+      for (int i = 0; i < 256; ++i) { finite = finite && std::isfinite(l[i]); peak = std::fmax(peak, std::fabs(l[i])); }
+    }
+    CHECK(finite); CHECK(peak <= 8.0f);
+  }
+}

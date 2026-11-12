@@ -19,7 +19,9 @@ struct EngineParams {
   float size = 30, diffusion = 0.7f, damping = -0.3f, pitch = 0, pitchMix = 0, width = 1;
   bool freeze = false;
   // Tail envelope
-  float preDelayMs = 20, sustainSec = 0, releaseSec = 4;
+  float preDelayMs = 20, attackSec = 0, sustainSec = 0, releaseSec = 4;
+  float sustainBendDb = 0;      // level change across the sustain: -24 .. +12 dB
+  float releaseCurve = 0;       // -1 falls away then lingers .. +1 holds on then collapses
   bool releaseInfinite = false;
   // EQ
   EqBand eq[6] = {{false, 40, 0, 0.707f}, {true, 150, 0, 0.707f}, {true, 400, 0, 1.0f},

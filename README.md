@@ -44,7 +44,7 @@ Qué está comprobado y qué no, sin adornos:
 
 | Aspecto | Estado |
 |---|---|
-| Motor DSP | Verificado con 71 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
+| Motor DSP | Verificado con 82 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
 | Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
 | Validación `auval` | La ejecuta GitHub Actions en cada push |
 | Carga y uso en Logic Pro | Validado por el autor en su Mac: pasa `auval`, carga en Logic y guarda y recupera los ajustes |
@@ -92,13 +92,30 @@ Lo encontrarás en una pista de audio o auxiliar, en **Audio FX → Audio Units 
 
 ### Pantalla TAIL ENVELOPE
 
-El eje horizontal es tiempo en escala logarítmica (de 1 ms a 80 s). La línea brillante es la forma que tendrá la cola; los tres rombos se arrastran en horizontal:
+El eje horizontal es tiempo en escala logarítmica (de 1 ms a 80 s). La línea brillante es la forma que tendrá la cola. Tiene seis puntos.
+
+Los tres **rombos** marcan los tiempos y se arrastran en horizontal:
 
 | Punto | Parámetro | Rango | Qué hace |
 |---|---|---|---|
 | **PRE** | Pre-Delay | 0–500 ms | Silencio entre la señal y el arranque de la reverb |
-| **SUS** | Sustain | 0–10 s | Tiempo que la cola se queda congelada a nivel pleno desde que calla la fuente, antes de empezar a caer |
+| **SUS** | Sustain | 0–10 s | Tiempo que la cola se queda sostenida desde que calla la fuente, antes de empezar a caer |
 | **REL** | Release | 0,1–60 s | Tiempo de caída (RT60). **Doble clic** en el rombo = cola infinita |
+
+Los tres **círculos** dan forma a la curva. Muestran su valor al pasar el ratón por encima, y con **doble clic** vuelven a su posición neutra:
+
+| Punto | Parámetro | Se arrastra | Rango | Qué hace |
+|---|---|---|---|---|
+| **ATT** | Attack | En horizontal | 0–2 s | La reverb entra en fundido cada vez que la fuente arranca tras un silencio. Suaviza los ataques; con valores largos, un golpe corto apenas llega a entrar |
+| **BEND** | Sustain Bender | En vertical | −24…+12 dB | Curva el sustain. Hacia abajo, la cola se hunde mientras se sostiene. Hacia arriba, **crece**: un crescendo que ninguna sala puede hacer. Solo aparece con Sustain mayor que 0 |
+| **CURVE** | Release Curve | En vertical | −100…+100 % | Forma de la caída. Arriba: aguanta y se desploma al final. Abajo: cae rápido y se queda flotando. A 0 es la caída exponencial normal |
+
+Con ATT, BEND y CURVE en neutro, la reverb se comporta como una envolvente clásica de pre-delay, sustain y release.
+
+A tener en cuenta:
+
+- **La envolvente la dispara la señal.** El ataque empieza cuando la fuente arranca; el sustain y el release, cuando calla. Con música continua, sin silencios, BEND y CURVE no llegan a actuar: mientras la fuente suena, la reverb decae con el Release normal.
+- **BEND hacia arriba con Sustain largo** hace crecer la cola hasta el limitador interno, donde satura. Puede ser un efecto buscado, pero conviene vigilar el nivel.
 
 Detrás de la curva se ve la señal en tiempo real, desplazándose de derecha a izquierda (unos 5 segundos de historia):
 
@@ -192,6 +209,8 @@ Puntos de partida, no verdades absolutas (recuerda: están sin escuchar).
 | **Reverb inversa** | REVERSE ON · WINDOW SYNC 1/4 · REL 1,5 s · MIX 100 % en un auxiliar |
 | **Gated de los 80** | GATE ON · SOURCE DRY · THRESHOLD ajustado a la caja · HOLD 150 ms · RELEASE 30 ms · SIZE 40 m · REL 3 s |
 | **Sala que respira** | LFO MANUAL · TARGET SIZE · RATE 0,1 Hz · DEPTH 60 % |
+| **Crescendo imposible** | SUS 3 s · BEND +9 dB · REL 1 s · CURVE +60 %: tras cada frase la reverb crece durante 3 segundos y luego se desploma |
+| **Reverb sin ataque** | ATT 400 ms · REL 3 s: los golpes pierden el transitorio y solo queda el cuerpo |
 | **Muro de sustain** | SUS 4 s · REL 0,5 s: la cola se queda clavada 4 segundos y luego desaparece de golpe |
 | **Cristal** | DAMPING +80 % · SIZE 8 m · DIFFUSION 30 % · REL 2 s |
 
@@ -221,12 +240,12 @@ dsp/                 Motor en C++17 puro, sin JUCE. Se compila y prueba en cualq
   Gate.h               Puerta
   ReverbEngine.h/.cpp  Encadena todo; es lo único que usa el plugin
 plugin/              Envoltorio JUCE
-  Parameters.*         Los 72 parámetros y su paso al motor
+  Parameters.*         Los 75 parámetros y su paso al motor
   PluginProcessor.*    Audio, estado, latencia, tempo
   PluginEditor.*       Ventana y distribución
   ui/                  Tema, diales, pantallas de envolvente, EQ y LFO
   assets/fonts/        Tipografías incrustadas
-tests/               71 tests del DSP, sin dependencias externas
+tests/               82 tests del DSP, sin dependencias externas
 .github/workflows/   Compilación y validación automáticas
 docs/                Spec de diseño y plan de implementación
 ```
@@ -252,6 +271,12 @@ Lo "imposible" está en lo que pasa dentro del bucle:
 `TailEnvelope` vigila la entrada con un detector rápido. **Mientras la fuente suena, la reverb decae con normalidad.** En cuanto calla, la realimentación de la FDN sube a exactamente 1 y el damping se desactiva: lo que haya en ese momento dentro de la red se queda a nivel pleno durante el tiempo de **Sustain**. Después la realimentación vuelve al valor que da el RT60 de **Release**, con una transición de 50 ms. Cada golpe nuevo reinicia la cuenta.
 
 Sostener solo cuando la fuente calla es deliberado: si la red tuviese realimentación 1 mientras sigue entrando señal, el nivel se acumularía sin freno.
+
+Los tres puntos de forma actúan sobre este mismo mecanismo:
+
+- **Attack** multiplica lo que entra a la reverb por una rampa de 0 a 1 que arranca en cada inicio de la fuente. Actúa sobre la entrada y no sobre la salida para no cortar la cola de la nota anterior.
+- **Bender** cambia la realimentación durante el sustain: en vez de exactamente 1, la ganancia por vuelta se calcula para que el nivel suba o baje los dB elegidos a lo largo del tiempo de Sustain. Hacia arriba la realimentación queda por encima de 1; el saturador de la red la mantiene acotada.
+- **Curve** hace que la velocidad de caída varíe durante el release. El nivel sigue `−60 dB · u^k`, donde `u` es la fracción del Release transcurrida y `k` va de 0,25 (cae deprisa y luego flota) a 4 (aguanta y se desploma); con `k = 1` es la caída exponencial de siempre.
 
 ### Cambio de tono
 
@@ -309,6 +334,7 @@ Qué miden los tests más relevantes:
 - **Sustain**: el nivel a 1,5 s es el mismo que a 0,5 s, y a los 4 s ha caído más de 40 dB. Con señal continua, el sustain no sube el nivel; con golpes repetidos, sube menos de 12 dB.
 - **La cola siempre termina**: con cualquier valor de Damping, de −100 a +100 %, cae más de 60 dB.
 - **Estabilidad**: 10 s de ruido a 0 dBFS con cada combinación extrema de tamaño, damping y tono; y 20 s cambiando *todos* los parámetros al azar en cada bloque. Nunca un valor no finito ni fuera de rango.
+- **Attack, Bender y Curve**: la entrada de la reverb queda más de 12 dB por debajo durante el ataque; el sustain sube o baja los dB pedidos; con la curva a +100 % el nivel apenas cae en el primer cuarto del release y con −100 % cae más de 25 dB.
 - **Reinicio del host**: con la cola sonando, un vaciado no produce clic y 50 ms después no queda nada del sonido anterior.
 - **Silencio**: tras la cola, la salida llega a cero exacto (sin denormales que disparen la CPU).
 - **Independencia del tamaño de bloque**: el mismo audio procesado en bloques de 1, 64, 480 o tamaños aleatorios da el mismo resultado.
@@ -335,7 +361,14 @@ Qué miden los tests más relevantes:
 - **Una pista falsa.** Al investigar los clics pareció que cambiar SIZE de golpe producía un estallido de nivel. Era un artefacto de medir con un tono puro (las resonancias de la sala se desplazan); con ruido no hay ni estallido ni clic. Se descartó el arreglo que se había empezado a escribir.
 - **El primer run de CI se canceló** al instante: la etiqueta `macos-14` ya no tenía runner. Se cambió a `macos-latest`.
 
-### 5. Interfaz
+### 5. Iteración tras la primera escucha
+
+Con el plugin ya instalado y validado en Logic, el autor pidió dos cambios, además de señalar los clics:
+
+- **Poder apagar el LFO**: se añadió el interruptor ON/OFF.
+- **Una envolvente más moldeable**: se añadieron los puntos ATTACK, BENDER y CURVE. Se valoró también una curva libre con puntos añadibles; se descartó porque esos puntos no serían automatizables desde Logic y hacía más fácil acabar con sonidos descontrolados.
+
+### 6. Interfaz
 
 Se presentó una maqueta antes de programar nada, con las condiciones dadas: negro y verde, estética futurista, el nombre arriba a la izquierda y los créditos discretos arriba a la derecha. Aprobada la maqueta, se implementó con primitivas de dibujo de JUCE, sin imágenes. El fondo de la pantalla principal es un corredor en perspectiva cuyo punto de fuga se desplaza con Size y el LFO; el símbolo es un triángulo de Penrose.
 
@@ -364,7 +397,7 @@ Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-I
 
 El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
-1. **dsp-tests** (Ubuntu): compila y pasa los 71 tests.
+1. **dsp-tests** (Ubuntu): compila y pasa los 82 tests.
 2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
 
 ### Identidad del plugin
@@ -386,6 +419,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 - [ ] Suena con los valores por defecto
 - [ ] La pantalla muestra la entrada y la reverb moviéndose
 - [ ] Arrastrar PRE, SUS y REL cambia el sonido; doble clic en REL da cola infinita
+- [ ] ATT suaviza la entrada de la reverb; BEND hace crecer o hundirse el sustain; CURVE cambia la forma de la caída
 - [ ] El EQ se oye y la curva corresponde
 - [ ] LFO en AUTO y en MANUAL, con los cuatro destinos, y apagado con ON/OFF
 - [ ] REVERSE: suena invertido y la señal seca sigue a tempo

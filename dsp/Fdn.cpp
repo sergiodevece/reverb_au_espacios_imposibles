@@ -73,6 +73,8 @@ void Fdn::setSizeMod(float mod) { if (std::isfinite(mod)) modTarget_ = std::clam
 void Fdn::setDiffusion(float a) { if (std::isfinite(a)) diffusion_ = std::clamp(a, 0.0f, 1.0f); }
 void Fdn::setWidth(float w) { if (std::isfinite(w)) width_ = std::clamp(w, 0.0f, 2.0f); }
 void Fdn::setHold(float h) { if (std::isfinite(h)) hold_ = std::clamp(h, 0.0f, 1.0f); }
+void Fdn::setHoldRate(float r) { if (std::isfinite(r)) holdRate_ = std::clamp(r, -60.0f, 240.0f); }
+void Fdn::setReleaseScale(float s) { if (std::isfinite(s)) releaseScale_ = std::clamp(s, 0.01f, 100.0f); }
 void Fdn::setFreeze(bool on) { freezeTarget_ = on ? 1.0f : 0.0f; }
 
 void Fdn::setRelease(float rt60, bool infinite) {
@@ -106,7 +108,8 @@ void Fdn::controlTick() {
     if (sizeSettled) { target = std::round(target); }
     baseInc_[i] = (target - base_[i]) / float(kControlInterval);
     float seconds = target / float(sr_);
-    gain_[i] = infinite_ ? 1.0f : std::pow(10.0f, -3.0f * seconds / rt60_);
+    gain_[i] = infinite_ ? 1.0f : std::pow(10.0f, -3.0f * seconds / rt60_ * releaseScale_);
+    holdGain_[i] = holdRate_ == 0.0f ? 1.0f : std::pow(10.0f, -holdRate_ * seconds / 20.0f);
   }
   settled_ = sizeSettled;
 }
@@ -129,7 +132,7 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
   const float inGain = kInputGain * (1.0f - freeze_);
   dl *= inGain; dr *= inGain;
 
-  // hold: 1 while sustaining or frozen. It lifts the loop gain to unity and removes the damping.
+  // hold: 1 while sustaining or frozen. It takes over the loop gain and removes the damping.
   const float hold = std::max(hold_, freeze_);
   const float lpBlend = lpBlend_ * (1.0f - hold);
   const float shelfGain = shelfGain_ * (1.0f - hold);
@@ -165,7 +168,9 @@ void Fdn::process(float inL, float inR, float& outL, float& outR) {
       float shifted = shifters_[size_t(i >> 2)].process(y);
       y += pitchMix_ * (shifted - y);
     }
-    v[i] = y * (gain_[i] + hold * (1.0f - gain_[i]));
+    float g = gain_[i] + hold_ * (holdGain_[i] - gain_[i]);     // sustain: held, sinking or growing
+    g += freeze_ * (1.0f - g);                                    // freeze: exactly lossless
+    v[i] = y * g;
   }
 
   hadamard16(v);

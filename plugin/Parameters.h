@@ -9,7 +9,7 @@ namespace ei {
 namespace id {
 #define EI_ID(name) inline constexpr const char* name = #name
 EI_ID(size); EI_ID(diffusion); EI_ID(damping); EI_ID(pitch); EI_ID(pitchMix); EI_ID(width); EI_ID(freeze);
-EI_ID(preDelay); EI_ID(sustain); EI_ID(release); EI_ID(releaseInf);
+EI_ID(preDelay); EI_ID(attack); EI_ID(sustain); EI_ID(bender); EI_ID(release); EI_ID(curve); EI_ID(releaseInf);
 EI_ID(eq6HighCut);
 EI_ID(lfoOn); EI_ID(lfoMode); EI_ID(lfoShape); EI_ID(lfoRate); EI_ID(lfoSync); EI_ID(lfoDivision); EI_ID(lfoDepth); EI_ID(lfoPhase); EI_ID(lfoTarget);
 EI_ID(revOn); EI_ID(revWindow); EI_ID(revSync); EI_ID(revDivision);
@@ -32,7 +32,7 @@ private:
   std::atomic<float>* get(const juce::String& paramId) const;
   juce::AudioProcessorValueTreeState& state_;
   std::atomic<float> *size, *diffusion, *damping, *pitch, *pitchMix, *width, *freeze;
-  std::atomic<float> *preDelay, *sustain, *release, *releaseInf;
+  std::atomic<float> *preDelay, *attack, *sustain, *bender, *release, *curve, *releaseInf;
   std::atomic<float> *eqOn[6], *eqFreq[6], *eqGain[6], *eqQ[6], *eq6HighCut;
   std::atomic<float> *lfoOn, *lfoMode, *lfoShape, *lfoRate, *lfoSync, *lfoDivision, *lfoDepth, *lfoPhase, *lfoTarget;
   std::atomic<float> *revOn, *revWindow, *revSync, *revDivision;

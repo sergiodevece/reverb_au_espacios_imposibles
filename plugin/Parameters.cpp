@@ -43,9 +43,12 @@ Layout createParameterLayout() {
 
   // Tail envelope
   addFloat(l, id::preDelay, "Pre-Delay", skewed(0.0f, 500.0f, 50.0f), d.preDelayMs, "ms");
+  addFloat(l, id::attack, "Attack", skewed(0.0f, 2.0f, 0.3f), d.attackSec, "s", 2);
   addFloat(l, id::sustain, "Sustain", skewed(0.0f, 10.0f, 1.5f), d.sustainSec, "s", 2);
   addFloat(l, id::release, "Release", skewed(0.1f, 60.0f, 4.0f), d.releaseSec, "s", 2);
   addBool(l, id::releaseInf, "Release Infinite", d.releaseInfinite);
+  addFloat(l, id::bender, "Sustain Bender", Range(-24.0f, 12.0f), d.sustainBendDb, "dB");
+  addFloat(l, id::curve, "Release Curve", Range(-100.0f, 100.0f), d.releaseCurve * 100.0f, "%", 0);
 
   // EQ
   for (int b = 1; b <= 6; ++b) {
@@ -99,7 +102,7 @@ std::atomic<float>* ParamReader::get(const juce::String& paramId) const {
 ParamReader::ParamReader(juce::AudioProcessorValueTreeState& state) : state_(state) {
 #define EI_GET(name) name = get(id::name)
   EI_GET(size); EI_GET(diffusion); EI_GET(damping); EI_GET(pitch); EI_GET(pitchMix); EI_GET(width); EI_GET(freeze);
-  EI_GET(preDelay); EI_GET(sustain); EI_GET(release); EI_GET(releaseInf); EI_GET(eq6HighCut);
+  EI_GET(preDelay); EI_GET(attack); EI_GET(sustain); EI_GET(bender); EI_GET(release); EI_GET(curve); EI_GET(releaseInf); EI_GET(eq6HighCut);
   EI_GET(lfoOn); EI_GET(lfoMode); EI_GET(lfoShape); EI_GET(lfoRate); EI_GET(lfoSync); EI_GET(lfoDivision); EI_GET(lfoDepth); EI_GET(lfoPhase); EI_GET(lfoTarget);
   EI_GET(revOn); EI_GET(revWindow); EI_GET(revSync); EI_GET(revDivision);
   EI_GET(gateOn); EI_GET(gateThreshold); EI_GET(gateAttack); EI_GET(gateHold); EI_GET(gateRelease); EI_GET(gateRange); EI_GET(gateSource);
@@ -119,7 +122,7 @@ EngineParams ParamReader::read() const {
   EngineParams e;
   e.size = f(size); e.diffusion = f(diffusion) * 0.01f; e.damping = f(damping) * 0.01f;
   e.pitch = f(pitch); e.pitchMix = f(pitchMix) * 0.01f; e.width = f(width) * 0.01f; e.freeze = on(freeze);
-  e.preDelayMs = f(preDelay); e.sustainSec = f(sustain); e.releaseSec = f(release); e.releaseInfinite = on(releaseInf);
+  e.preDelayMs = f(preDelay); e.attackSec = f(attack); e.sustainBendDb = f(bender); e.releaseCurve = f(curve) * 0.01f; e.sustainSec = f(sustain); e.releaseSec = f(release); e.releaseInfinite = on(releaseInf);
   for (int b = 0; b < 6; ++b) { e.eq[b].on = on(eqOn[b]); e.eq[b].freq = f(eqFreq[b]); e.eq[b].gainDb = f(eqGain[b]); e.eq[b].q = f(eqQ[b]); }
   e.eqBand6HighCut = on(eq6HighCut);
   e.lfoOn = on(lfoOn);
