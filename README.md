@@ -48,7 +48,7 @@ Qué está comprobado y qué no, sin adornos:
 | Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
 | Validación `auval` | La ejecuta GitHub Actions en cada push |
 | Carga y uso en Logic Pro | Validado por el autor en su Mac: pasa `auval`, carga en Logic y guarda y recupera los ajustes |
-| Calidad sonora | Primera escucha del autor: cola natural y densa, cambio de tono limpio, nivel correcto. Detectó clics esporádicos al arrancar la reproducción y en modo ciclo; ver [Problemas encontrados](#4-problemas-encontrados-y-cómo-se-resolvieron) |
+| Calidad sonora | Validada por escucha del autor a lo largo de varias rondas: cola natural y densa, cambio de tono limpio, sin clics, y la reverb se calla al parar. Ver [Proceso de desarrollo](#proceso-de-desarrollo) |
 
 ## Instalación en Logic Pro
 
@@ -375,7 +375,7 @@ Qué miden los tests más relevantes:
 - **(Revisión) Reactivar REVERSE soltaba audio antiguo** que se había quedado en su búfer. Ahora el inversor se alimenta siempre.
 - **(Revisión) La latencia se comunicaba al host desde el hilo de audio.** Ahora se hace desde el hilo de mensajes y solo cuando el valor se estabiliza.
 - **(Revisión) El EQ cambiaba de golpe.** Ahora cada cambio se desliza en 20 ms.
-- **(Primera escucha) Clics al arrancar la reproducción y en modo ciclo.** En reproducción continua el motor no produce discontinuidades (medido con señales suaves y con ruido). El problema estaba en el reinicio que pide el host al arrancar o al saltar el ciclo: el plugin cortaba la cola en seco y además borraba unos 17 MB de retardos en el hilo de audio, lo bastante lento como para provocar un corte con búferes pequeños. Ahora el reinicio es instantáneo (los retardos no se borran: lo antiguo simplemente deja de poder leerse) y la cola se funde en 5 ms en vez de cortarse. *Pendiente de confirmar por escucha que los clics han desaparecido.*
+- **(Primera escucha) Clics al arrancar la reproducción y en modo ciclo.** En reproducción continua el motor no produce discontinuidades (medido con señales suaves y con ruido). El problema estaba en el reinicio que pide el host al arrancar o al saltar el ciclo: el plugin cortaba la cola en seco y además borraba unos 17 MB de retardos en el hilo de audio, lo bastante lento como para provocar un corte con búferes pequeños. Ahora el reinicio es instantáneo (los retardos no se borran: lo antiguo simplemente deja de poder leerse) y la cola se funde en 5 ms en vez de cortarse. Confirmado después por escucha: los clics desaparecieron.
 - **Una pista falsa.** Al investigar los clics pareció que cambiar SIZE de golpe producía un estallido de nivel. Era un artefacto de medir con un tono puro (las resonancias de la sala se desplazan); con ruido no hay ni estallido ni clic. Se descartó el arreglo que se había empezado a escribir.
 - **El primer run de CI se canceló** al instante: la etiqueta `macos-14` ya no tenía runner. Se cambió a `macos-latest`.
 
@@ -398,7 +398,7 @@ En esa misma escucha se pidió que **la reverb se calle al parar la reproducció
 
 En esa escucha el autor señaló además que con SIZE por encima de 100 m y sonidos cortos el resultado era confuso, y fijó un principio de diseño: *el pre-delay marca el comienzo de los rebotes, nunca la física. Espacios imposibles, respuestas imposibles.* Hasta entonces la reverb no sonaba hasta que el sonido recorría la línea más corta de la red, lo que a 300 m eran 0,3 s y a 1000 m un segundo entero. Se cambió la toma de salida (64 puntos a lo largo de las líneas, algunos casi al principio) y se hizo crecer la difusión de entrada con el tamaño. Contrapartida: las salas pequeñas también arrancan antes que en versiones anteriores (unos 30 ms antes a 30 m).
 
-**Pendiente:** el autor oye clics en un bounce con SIZE 73 m y una caja. El análisis del archivo no muestra discontinuidades (la cola tiene la textura de ruido esperada) y el caso no se ha podido reproducir fuera de Logic, así que el origen sigue sin identificar.
+**Sobre los clics de aquel bounce** (SIZE 73 m y una caja): el análisis del archivo no mostró discontinuidades y el caso no se pudo reproducir fuera de Logic, así que su origen no llegó a identificarse. Con la versión siguiente (vuelta a los seis controles y nueva toma de salida) el autor confirma que no han vuelto a aparecer. Queda anotado por si reaparecen: no hay una causa demostrada.
 
 ### 6. Interfaz
 
@@ -478,7 +478,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 - **El aviso de latencia a Logic** llega con hasta 0,2 s de retraso al activar REVERSE o cambiar la ventana.
 - **En bypass con REVERSE activo** la señal no se retrasa lo que el plugin declara de latencia.
 - **Memoria**: unos 17 MB por instancia a 48 kHz y unos 67 MB a 192 kHz, por los retardos de hasta 3 s.
-- **CPU**: en las pruebas, entre el 3 % y el 7 % de un núcleo según los ajustes; el caso más caro es sala grande, DENSITY al 100 % y LFO activo (medido en Linux, no en un Mac).
+- **CPU**: en las pruebas, entre el 3 % y el 7 % de un núcleo según los ajustes; el caso más caro es sala grande, DENSITY al 100 % y LFO activo (medido en Linux). En el Mac del autor una instancia no mueve el medidor; falta probar con muchas a la vez.
 - **Sin presets de fábrica**, sin VST3/AAX, sin entrada de sidechain externa y con ventana de tamaño fijo (1000×640).
 - **Sin firmar ni notarizar**: hace falta el paso de la cuarentena.
 
