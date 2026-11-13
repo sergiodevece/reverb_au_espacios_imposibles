@@ -1,2 +1,488 @@
-# reverb_au_espacios_imposibles
-Plugin para AU de reverb basado en la creación de espacios imposibles
+# IMPOSSIBLE SPACES
+
+Reverb en formato **Audio Unit** para **Logic Pro**, basada en espacios que no pueden existir: salas de un kilómetro, colas que no decaen, que suben de tono a cada rebote o que ganan brillo con el tiempo.
+
+*Marca: VitaPlug · Diseño: SerxDev*
+
+![Interfaz de Impossible Spaces](docs/img/interfaz.png)
+
+> Captura real del plugin, tomada de la versión autónoma compilada en Linux y sin audio entrando (por eso la pantalla de señal está vacía).
+
+---
+
+## Índice
+
+1. [Qué incluye](#qué-incluye)
+2. [Estado del proyecto](#estado-del-proyecto)
+3. [Instalación en Logic Pro](#instalación-en-logic-pro)
+4. [Guía de uso](#guía-de-uso)
+5. [Recetas](#recetas)
+6. [Cómo funciona por dentro](#cómo-funciona-por-dentro)
+7. [Proceso de desarrollo](#proceso-de-desarrollo)
+8. [Compilar y probar](#compilar-y-probar)
+9. [Validación en Logic: checklist](#validación-en-logic-checklist)
+10. [Limitaciones conocidas](#limitaciones-conocidas)
+11. [Licencias](#licencias)
+
+---
+
+## Qué incluye
+
+| Pedido | Cómo está resuelto |
+|---|---|
+| Reverb de espacios imposibles | Un único motor muy paramétrico: red de 16 retardos realimentados (FDN) con tamaño de 1 m a 1 km, cola infinita, cambio de tono dentro del bucle y damping que puede oscurecer **o abrillantar** |
+| Ecualizador de 6 bandas | Low-cut, low-shelf, 3 campanas y high-shelf conmutable a high-cut, con curva editable en pantalla |
+| LFO auto o editable | **AUTO**: sincronizado al tempo y con profundidad que se retira cuando suena la fuente. **MANUAL**: forma, velocidad (Hz o tempo), profundidad y fase. Destino: Size, Pitch, Damping o Pan |
+| Pantalla para editar pre-delay, sustain y release | Tres puntos arrastrables sobre la curva de la envolvente |
+| Ver el impacto de la señal sobre la reverb | Historial en tiempo real del nivel de entrada (barras) y de la reverb (área) detrás de la envolvente |
+| Inversor | Reverb inversa en tiempo real, con ventana libre o sincronizada al tempo y latencia compensada |
+| Puerta de ruido | Para reverbs gateadas: detecta desde la señal seca (el gated clásico) o desde la propia cola |
+
+## Estado del proyecto
+
+Qué está comprobado y qué no, sin adornos:
+
+| Aspecto | Estado |
+|---|---|
+| Motor DSP | Verificado con 94 tests automáticos (estabilidad, tiempos de caída, EQ, inversión, puerta, automatización brusca, varias frecuencias de muestreo) |
+| Compilación del plugin | Verificada en Linux (versión autónoma) y en GitHub Actions sobre macOS (AU universal) — ver la pestaña *Actions* |
+| Validación `auval` | La ejecuta GitHub Actions en cada push |
+| Carga y uso en Logic Pro | Validado por el autor en su Mac: pasa `auval`, carga en Logic y guarda y recupera los ajustes |
+| Calidad sonora | Validada por escucha del autor a lo largo de varias rondas: cola natural y densa, cambio de tono limpio, sin clics, y la reverb se calla al parar. Ver [Proceso de desarrollo](#proceso-de-desarrollo) |
+
+## Instalación en Logic Pro
+
+### 1. Descargar
+
+En GitHub: pestaña **Actions** → último run en verde del workflow **build** → sección *Artifacts* → **ImpossibleSpaces-AU**. Descomprime hasta obtener `Impossible Spaces.component`.
+
+(O compílalo tú: ver [Compilar y probar](#compilar-y-probar).)
+
+### 2. Instalar
+
+```bash
+mkdir -p ~/Library/Audio/Plug-Ins/Components
+cp -R "Impossible Spaces.component" ~/Library/Audio/Plug-Ins/Components/
+```
+
+### 3. Quitar la cuarentena
+
+El plugin no está firmado con un certificado de Apple, así que macOS lo bloquea al venir de una descarga:
+
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"Impossible Spaces.component"
+```
+
+### 4. Validar
+
+```bash
+killall -9 AudioComponentRegistrar 2>/dev/null
+auval -v aufx Imsp Vita
+```
+
+Debe terminar con `AU VALIDATION SUCCEEDED`.
+
+### 5. Cargar en Logic
+
+Abre Logic. Si no aparece: **Logic Pro → Ajustes → Gestor de plug-ins**, busca *Impossible Spaces* y pulsa **Restablecer y volver a explorar la selección**.
+
+Lo encontrarás en una pista de audio o auxiliar, en **Audio FX → Audio Units → VitaPlug → Impossible Spaces**.
+
+## Guía de uso
+
+### Pantalla TAIL ENVELOPE
+
+El eje horizontal es tiempo en escala logarítmica (de 1 ms a 80 s). La línea brillante es la forma que tendrá la cola. Tiene seis puntos.
+
+Los tres **rombos** marcan los tiempos y se arrastran en horizontal:
+
+| Punto | Parámetro | Rango | Qué hace |
+|---|---|---|---|
+| **PRE** | Pre-Delay | 0–500 ms | Silencio entre la señal y el arranque de la reverb. Es lo único que decide cuándo empieza: el tamaño de la sala no la retrasa |
+| **SUS** | Sustain | 0–10 s | Tiempo que la cola se queda sostenida desde que calla la fuente, antes de empezar a caer |
+| **REL** | Release | 0,1–60 s | Tiempo de caída (RT60). **Doble clic** en el rombo = cola infinita |
+
+Los tres **círculos** dan forma a la curva. Muestran su valor al pasar el ratón por encima, y con **doble clic** vuelven a su posición neutra:
+
+| Punto | Parámetro | Se arrastra | Rango | Qué hace |
+|---|---|---|---|---|
+| **ATT** | Attack | En horizontal | 0–2 s | La reverb entra en fundido cada vez que la fuente arranca tras un silencio. Suaviza los ataques; con valores largos, un golpe corto apenas llega a entrar |
+| **BEND** | Sustain Bender | En vertical | −24…+12 dB | Curva el sustain. Hacia abajo, la cola se hunde mientras se sostiene. Hacia arriba, **crece**: un crescendo que ninguna sala puede hacer. Solo aparece con Sustain mayor que 0 |
+| **CURVE** | Release Curve | En vertical | −100…+100 % | Forma de la caída. Arriba: aguanta y se desploma al final. Abajo: cae rápido y se queda flotando. A 0 es la caída exponencial normal |
+
+Con ATT, BEND y CURVE en neutro, la reverb se comporta como una envolvente clásica de pre-delay, sustain y release.
+
+A tener en cuenta:
+
+- **La envolvente la dispara la señal.** El ataque empieza cuando la fuente arranca; el sustain y el release, cuando calla. Con música continua, sin silencios, BEND y CURVE no llegan a actuar: mientras la fuente suena, la reverb decae con el Release normal.
+- **BEND hacia arriba con Sustain largo** hace crecer la cola hasta el limitador interno, donde satura. Puede ser un efecto buscado, pero conviene vigilar el nivel.
+
+Detrás de la curva se ve la señal en tiempo real, desplazándose de derecha a izquierda (unos 5 segundos de historia):
+
+- **Barras claras**: nivel de entrada.
+- **Área verde**: nivel de la reverb.
+- **Línea discontinua lima**: umbral de la puerta (solo con la puerta activada). El testigo **GATE** se enciende cuando está abierta.
+
+La escala vertical de la señal va de 0 a −72 dB. Ojo: la envolvente usa el eje de tiempo logarítmico y la señal en vivo un eje lineal; comparten pantalla, no escala.
+
+### Pantalla EQ
+
+Ecualiza solo la reverb, no la señal seca.
+
+| Banda | Tipo | Por defecto |
+|---|---|---|
+| 1 | Low-cut 12 dB/oct | 40 Hz, apagada |
+| 2 | Low-shelf | 150 Hz |
+| 3, 4, 5 | Campana | 400 Hz, 1,5 kHz, 5 kHz |
+| 6 | High-shelf o high-cut (selector **SHELF / CUT**) | 10 kHz |
+
+- **Arrastrar** un nodo: frecuencia (20 Hz–20 kHz) y ganancia (±18 dB). Los filtros de corte solo se mueven en frecuencia.
+- **Rueda** sobre un nodo: Q (0,1–10).
+- **Doble clic**: enciende o apaga la banda.
+
+### SPACE
+
+| Control | Rango | Por defecto | Qué hace |
+|---|---|---|---|
+| **SIZE** | 1–1000 m | 30 m | Escala del espacio: separación entre rebotes y carácter de la cola. **No retrasa el arranque**: incluso a 1000 m la reverb empieza donde diga PRE. Moverlo mientras suena produce un efecto Doppler |
+| **DIFFUSION** | 0–100 % | 70 % | Emborrona el arranque de la reverb: bajo = se distinguen los primeros ecos, alto = nube desde el principio |
+| **DENSITY** | 0–100 % | 50 % | Textura de toda la cola. 0 %: rebotes sueltos que se repiten sin mezclarse. 50 %: la red normal. 100 %: más densa, con difusores dentro del propio bucle. Para ecos realmente separados, baja también DIFFUSION |
+| **DAMPING** | −100…+100 % | −30 % | Negativo: los agudos mueren antes y la cola se oscurece. Positivo: mueren antes los graves y la cola se va quedando en puro brillo (imposible en una sala real) |
+| **WIDTH** | 0–200 % | 100 % | Anchura estéreo; 0 = mono |
+| **PITCH** | ±24 semitonos (dos octavas) | 0 | Cambio de tono dentro de la realimentación: la cola sube o baja un poco más en cada vuelta |
+| **PITCH MIX** | 0–100 % | 0 % | Cuánta realimentación pasa por el cambio de tono. A 0, PITCH no hace nada |
+| **FREEZE** | on/off | off | Congela lo que haya dentro: deja de entrar señal y nada decae |
+
+### LFO
+
+| Control | Qué hace |
+|---|---|
+| **ON/OFF** | Apaga el LFO por completo (con un fundido de unas décimas de segundo, para que no se note el salto) |
+| **AUTO / MANUAL** | AUTO: seno de un compás, sincronizado al tempo; se retira cuando suena la fuente (por encima de −12 dBFS desaparece) y vuelve en las colas. MANUAL: tú decides todo |
+| **SHAPE** | Seno, triángulo, sierra, cuadrada, aleatoria (solo MANUAL) |
+| **TARGET** | Destino: SIZE (±50 %), PITCH (±2 semitonos), DAMP (±50 %) o PAN (de lado a lado) — valores a profundidad máxima |
+| **RATE** | 0,01–20 Hz. Con **SYNC**, de 8 compases a 1/32 |
+| **DEPTH** | 0–100 % (20 % por defecto) |
+| **PHASE** | 0–360°, punto de arranque de la onda (solo MANUAL) |
+
+Para que TARGET = PITCH se oiga, PITCH MIX debe ser mayor que 0.
+
+### REVERSE
+
+Reproduce la reverb al revés por tramos: en vez de apagarse, cada tramo crece.
+
+| Control | Qué hace |
+|---|---|
+| **ON/OFF** | Activa el inversor |
+| **WINDOW** | Longitud del tramo, 50 ms–2 s. Con **SYNC**, de 1/32 a lo que quepa en 2 s según el tempo |
+
+Activarlo introduce una latencia igual a la ventana. El plugin se la declara a Logic, que la compensa, y retrasa la señal seca lo mismo para que siga alineada.
+
+### GATE
+
+| Control | Rango | Por defecto | Qué hace |
+|---|---|---|---|
+| **THRESHOLD** | −80…0 dB | −30 dB | Nivel por encima del cual la puerta se abre |
+| **RANGE** | −80…0 dB | −80 dB | Cuánto atenúa cerrada. A 0 dB no hace nada |
+| **SOURCE** | DRY / WET | DRY | DRY: manda la señal original (la reverb se corta cuando calla la fuente). WET: manda la propia reverb |
+| **ATTACK** | 0,1–100 ms | 1 ms | Velocidad de apertura |
+| **HOLD** | 0–2000 ms | 100 ms | Tiempo que sigue abierta tras caer bajo el umbral |
+| **RELEASE** | 5–2000 ms | 100 ms | Velocidad de cierre |
+
+### OUTPUT
+
+| Control | Rango | Por defecto |
+|---|---|---|
+| **MIX** | 0–100 % | 30 %. En un envío auxiliar, ponlo al 100 % |
+| **LEVEL** | −24…+12 dB | 0 dB |
+
+Todos los controles vuelven a su valor por defecto con doble clic, y todos son automatizables.
+
+## Recetas
+
+Puntos de partida, no verdades absolutas (recuerda: están sin escuchar).
+
+| Efecto | Ajustes |
+|---|---|
+| **Catedral infinita** | SIZE 150 m · DAMPING −20 % · REL: doble clic (∞) · MIX a gusto. Cada nota se suma a las anteriores |
+| **Shimmer ascendente** | PITCH +12 · PITCH MIX 30–50 % · REL 8 s · DAMPING −40 % |
+| **Batería mutante** | SIZE 3–8 m · PITCH entre ±12 y ±24 · PITCH MIX 50–80 % · REL 0,5–1 s: cada golpe deja una estela que sube o baja de tono |
+| **Eco de piedra** | DENSITY 0 % · DIFFUSION 0 % · SIZE 60 m: dieciséis ecos nítidos en vez de una nube |
+| **Seda** | DENSITY 100 % · DIFFUSION 90 % · SIZE 40 m |
+| **Abismo** | PITCH −5 · PITCH MIX 60 % · SIZE 300 m · DAMPING −60 % |
+| **Reverb inversa** | REVERSE ON · WINDOW SYNC 1/4 · REL 1,5 s · MIX 100 % en un auxiliar |
+| **Gated de los 80** | GATE ON · SOURCE DRY · THRESHOLD ajustado a la caja · HOLD 150 ms · RELEASE 30 ms · SIZE 40 m · REL 3 s |
+| **Sala que respira** | LFO MANUAL · TARGET SIZE · RATE 0,1 Hz · DEPTH 60 % |
+| **Crescendo imposible** | SUS 3 s · BEND +9 dB · REL 1 s · CURVE +60 %: tras cada frase la reverb crece durante 3 segundos y luego se desploma |
+| **Reverb sin ataque** | ATT 400 ms · REL 3 s: los golpes pierden el transitorio y solo queda el cuerpo |
+| **Muro de sustain** | SUS 4 s · REL 0,5 s: la cola se queda clavada 4 segundos y luego desaparece de golpe |
+| **Cristal** | DAMPING +80 % · SIZE 8 m · DIFFUSION 30 % · REL 2 s |
+
+## Cómo funciona por dentro
+
+### Cadena de señal
+
+```
+Entrada ─┬─────────────────────────────────────────────────── seca ─┐
+         └→ Pre-delay → Difusores → FDN 16 → Inversor → EQ → Puerta ─┴→ Mix → Salida
+                                      ▲
+                 envolvente (sustain/release) · LFO · detector de nivel
+```
+
+### Estructura del código
+
+```
+dsp/                 Motor en C++17 puro, sin JUCE. Se compila y prueba en cualquier sistema.
+  DelayLine.h          Retardo circular con lectura entera e interpolada (Hermite)
+  EnvelopeFollower.h   Detector de nivel
+  PitchShifter.h       Cambio de tono granular
+  Fdn.h/.cpp           Núcleo de la reverb
+  TailEnvelope.h       Lógica de sustain
+  Biquad.h, Eq6.h      Ecualizador
+  Lfo.h                LFO
+  Reverser.h           Inversor
+  Gate.h               Puerta
+  ReverbEngine.h/.cpp  Encadena todo; es lo único que usa el plugin
+plugin/              Envoltorio JUCE
+  Parameters.*         Los 76 parámetros y su paso al motor
+  PluginProcessor.*    Audio, estado, latencia, tempo
+  PluginEditor.*       Ventana y distribución
+  ui/                  Tema, diales, pantallas de envolvente, EQ y LFO
+  assets/fonts/        Tipografías incrustadas
+tests/               94 tests del DSP, sin dependencias externas
+.github/workflows/   Compilación y validación automáticas
+docs/                Spec de diseño y plan de implementación
+```
+
+### El núcleo: FDN de 16 líneas
+
+Una *Feedback Delay Network* son varios retardos cuyas salidas se mezclan entre sí y vuelven a entrar. Con retardos de longitudes irregulares y una mezcla sin pérdidas, los ecos se multiplican hasta formar una cola densa.
+
+- **16 líneas de retardo** con longitudes repartidas de forma irregular entre el 35 % y el 100 % de `Size / 343 m/s`. A 30 m, la más larga mide 87 ms; a 1000 m, 2,9 s.
+- **Matriz de Hadamard** 16×16 para la mezcla: reparte cada línea por igual entre todas las demás sin perder ni ganar energía, y se calcula con 64 sumas.
+- **Ganancia por línea** calculada para que la caída total sea de 60 dB en el tiempo de Release: `g = 10^(−3 · T_línea / RT60)`.
+- **Difusores**: 4 filtros pasa-todo en serie por canal antes de la red, para que un golpe seco no suene a ecos sueltos.
+- **Salida estéreo**: las líneas pares van a la izquierda y las impares a la derecha, con signos alternos, lo que da dos canales decorrelados.
+- **La salida no se toma al final de las líneas, sino en 64 puntos repartidos a lo largo de ellas** (cuatro por línea). Varios están casi al principio. Así la reverb responde de inmediato sea cual sea el tamaño, y una sala enorme devuelve un flujo continuo de reflexiones en vez de unos pocos ecos lejanos. Es una decisión deliberadamente no física: en una sala real de 300 m el primer rebote tardaría casi un segundo. Aquí el arranque lo decide el pre-delay y nada más.
+- **La difusión de entrada crece con el tamaño.** Hasta 30 m actúan cuatro difusores cortos y fijos; por encima se suman otros cuatro cuya longitud se estira con la sala, para que un golpe seco en un espacio gigante llegue ya convertido en nube.
+
+Lo "imposible" está en lo que pasa dentro del bucle:
+
+- **Damping bipolar.** En negativo es un paso bajo (de 20 kHz a 500 Hz): cada rebote pierde agudos, como en una sala real. En positivo ocurre lo contrario: los graves pierden hasta 3 dB más que los agudos en cada vuelta, así que la cola se aclara con el tiempo, algo que ningún material hace. Está normalizado para que ninguna frecuencia supere la ganancia del Release: la cola siempre termina.
+- **Cambio de tono en la realimentación.** Cuatro de las 16 líneas llevan un desplazador de tono. Como la señal da vueltas, cada pasada la desplaza otra vez: la cola sube o baja sin fin.
+- **Saturador.** Con realimentación igual o mayor que 1 la energía crecería sin límite. Un limitador suave en cada línea lo impide; por debajo de cierto nivel es totalmente lineal, para que una cola sostenida no pierda nada.
+
+### Sustain y release
+
+`TailEnvelope` vigila la entrada con un detector rápido. **Mientras la fuente suena, la reverb decae con normalidad.** En cuanto calla, la realimentación de la FDN sube a exactamente 1 y el damping se desactiva: lo que haya en ese momento dentro de la red se queda a nivel pleno durante el tiempo de **Sustain**. Después la realimentación vuelve al valor que da el RT60 de **Release**, con una transición de 50 ms. Cada golpe nuevo reinicia la cuenta.
+
+Sostener solo cuando la fuente calla es deliberado: si la red tuviese realimentación 1 mientras sigue entrando señal, el nivel se acumularía sin freno.
+
+Los tres puntos de forma actúan sobre este mismo mecanismo:
+
+- **Attack** multiplica lo que entra a la reverb por una rampa de 0 a 1 que arranca en cada inicio de la fuente. Actúa sobre la entrada y no sobre la salida para no cortar la cola de la nota anterior.
+- **Bender** cambia la realimentación durante el sustain: en vez de exactamente 1, la ganancia por vuelta se calcula para que el nivel suba o baje los dB elegidos a lo largo del tiempo de Sustain. Hacia arriba la realimentación queda por encima de 1; el saturador de la red la mantiene acotada.
+- **Curve** hace que la velocidad de caída varíe durante el release. El nivel sigue `−60 dB · u^k`, donde `u` es la fracción del Release transcurrida y `k` va de 0,25 (cae deprisa y luego flota) a 4 (aguanta y se desploma); con `k = 1` es la caída exponencial de siempre.
+
+### Densidad
+
+El control tiene dos mitades con mecanismos distintos:
+
+- **De 0 a 50 %** cambia cuánto se mezclan las 16 líneas entre sí. La matriz de mezcla se desliza desde la identidad (cada línea realimenta solo a sí misma: dieciséis ecos independientes) hasta la matriz de Hadamard (mezcla total). En todo el recorrido la matriz sigue siendo ortogonal, así que no se gana ni se pierde energía por el camino.
+- **De 50 a 100 %** activa un difusor (filtro pasa-todo) dentro de cada línea. Su retardo se recorta de la propia línea, de modo que el tiempo de vuelta no cambia; lo que cambia es que cada vuelta multiplica los rebotes en vez de solo repetirlos.
+
+Al 50 % el resultado es idéntico, muestra a muestra, al de la red sin este control.
+
+### Cambio de tono
+
+Granular, con dos cabezales de lectura sobre un retardo de 60 ms. Cada uno se desplaza a velocidad distinta de la de escritura (eso cambia el tono) y, cuando llega al final, salta al principio. Para tapar el salto, cada cabezal lleva una ventana que lo silencia justo en ese momento, y el otro, desfasado media vuelta, cubre el hueco.
+
+### Ecualizador
+
+Seis filtros bicuadráticos en serie con las fórmulas clásicas de Robert Bristow-Johnson. La curva que ves en pantalla se calcula con esas mismas fórmulas, así que dibujo y sonido coinciden.
+
+### LFO
+
+Un oscilador lento con cinco formas. En modo AUTO su profundidad se multiplica por `1 − nivel de entrada`: con la fuente sonando fuerte no modula, y al callar la fuente aparece el movimiento en la cola.
+
+### Inversor
+
+No se puede invertir el tiempo en directo, pero sí por tramos. El inversor guarda la reverb y la reproduce hacia atrás en "granos" de la longitud de la ventana. Dos granos solapados a la mitad, cada uno con una ventana suave, evitan clics en las uniones. El precio es la latencia: hay que esperar a tener el tramo para poder darle la vuelta.
+
+### Puerta
+
+Una máquina de estados sencilla: abre al superar el umbral, espera el tiempo de *hold* al caer por debajo y luego cierra. Tiene 3 dB de histéresis para no castañetear con señales que rondan el umbral. Con fuente DRY escucha la señal original, no la reverb: por eso la cola se corta en seco al callar la caja aunque a la reverb le quedasen segundos.
+
+### Seguridad del hilo de audio
+
+Durante el proceso no se reserva memoria, no se bloquea y no se hace entrada/salida: todos los búferes se crean al preparar el plugin. La interfaz recibe los niveles por una cola sin bloqueo. La salida está acotada para cualquier combinación de parámetros.
+
+## Proceso de desarrollo
+
+### 1. Definición
+
+Partiendo de la petición original se tomaron estas decisiones:
+
+| Decisión | Elegido | Descartado y por qué |
+|---|---|---|
+| Framework | JUCE 8 + CMake | AUv3 nativo en Swift: imposible de probar fuera de un Mac y con un proyecto Xcode frágil de mantener a mano |
+| Compilación | GitHub Actions en macOS | Compilar solo en local: no habría verificación automática de que el AU compila y valida |
+| Concepto | Un motor muy paramétrico | Varios "espacios" seleccionables: más rápido de usar, pero menos libre |
+| Algoritmo | FDN de 16 líneas | *Plate* tipo Dattorro (suena a reverb convencional) y convolución (ni cola infinita ni tono en el bucle) |
+| LFO AUTO | Sincronizado y dependiente del nivel | Modulación fija de fábrica; dibujar la forma de onda a mano |
+
+El diseño completo está en [`docs/superpowers/specs/`](docs/superpowers/specs/2026-11-12-reverb-espacios-imposibles-design.md) y el plan de tareas en [`docs/superpowers/plans/`](docs/superpowers/plans/2026-11-12-reverb-espacios-imposibles.md).
+
+### 2. Condicionante principal
+
+El desarrollo se hizo en un contenedor Linux: sin macOS, sin Logic y sin altavoces. De ahí la arquitectura en dos capas. El DSP no depende de JUCE ni de Apple, así que se pudo probar entero en Linux; el envoltorio del plugin es fino y lo verifica la integración continua en un Mac real.
+
+### 3. Construcción con tests primero y revisión independiente
+
+Al terminar, un revisor independiente (sin el contexto de quien escribió el código) repasó la rama entera. Encontró un fallo crítico y cuatro importantes que los tests no habían cazado; se corrigieron todos, cada uno con un test nuevo que primero fallaba. Están señalados como *(Revisión)* más abajo.
+
+Cada bloque se escribió así: primero el test, comprobar que falla, luego el código, comprobar que pasa. Orden: retardos → cambio de tono → FDN → envolvente → EQ → LFO → inversor → puerta → motor completo → plugin → interfaz → CI.
+
+Qué miden los tests más relevantes:
+
+- **Tiempo de caída**: se mide el RT60 real de la respuesta al impulso y se compara con Release (0,5, 2 y 8 s; tolerancia ±20 %).
+- **Sustain**: el nivel a 1,5 s es el mismo que a 0,5 s, y a los 4 s ha caído más de 40 dB. Con señal continua, el sustain no sube el nivel; con golpes repetidos, sube menos de 12 dB.
+- **La cola siempre termina**: con cualquier valor de Damping, de −100 a +100 %, cae más de 60 dB.
+- **Estabilidad**: 10 s de ruido a 0 dBFS con cada combinación extrema de tamaño, damping y tono; y 20 s cambiando *todos* los parámetros al azar en cada bloque. Nunca un valor no finito ni fuera de rango.
+- **Attack, Bender y Curve**: la entrada de la reverb queda más de 12 dB por debajo durante el ataque; el sustain sube o baja los dB pedidos; con la curva a +100 % el nivel apenas cae en el primer cuarto del release y con −100 % cae más de 25 dB.
+- **El pre-delay manda**: a 3, 30, 150, 600 y 1000 m la respuesta empieza en los primeros 12 ms tras el pre-delay. La densidad de ecos a 0,1 s en una sala de 300 m pasa de 0,00 a 0,78, y en una de 1000 m de 0,00 a 0,38.
+- **Densidad**: se mide la densidad de ecos de la respuesta al impulso (0 = ecos aislados, 1 = cola totalmente densa). A 0 % queda en 0,01; a 100 % la cola se llena antes que a 50 %. A cualquier valor la energía se conserva y el tiempo de caída se mantiene.
+- **Cambio de tono a dos octavas**: la energía de salida se concentra en la frecuencia pedida.
+- **Reinicio del host**: con la cola sonando, un vaciado no produce clic y 50 ms después no queda nada del sonido anterior.
+- **Silencio**: tras la cola, la salida llega a cero exacto (sin denormales que disparen la CPU).
+- **Independencia del tamaño de bloque**: el mismo audio procesado en bloques de 1, 64, 480 o tamaños aleatorios da el mismo resultado.
+- **Frecuencias de muestreo**: a 44,1, 96 y 192 kHz los tiempos se mantienen en segundos.
+- **Host sin tempo**: con tempo 0 o negativo se usan 120 BPM.
+- **EQ**: la ganancia medida con senos coincide con la configurada y con la curva dibujada.
+- **Inversión**: un golpe que decae sale como un golpe que crece.
+- **Gated**: con la puerta, la reverb queda 60 dB por debajo a los 500 ms; sin ella, sigue sonando.
+
+### 4. Problemas encontrados y cómo se resolvieron
+
+- **El primer test del inversor estaba mal planteado.** Pedía que una rampa saliese invertida, pero con dos granos solapados eso no se cumple ni en un inversor correcto. Se sustituyó por uno que mide dónde queda la energía respecto al pico.
+- **El inversor sonaba 1,6 dB bajo.** Dos granos que leen momentos distintos no suman en amplitud sino en potencia. Se compensó con una ganancia fija.
+- **El freeze dejaba pasar algo de entrada** durante su fundido. Se acortó el fundido.
+- **La puerta cerraba tarde** porque compartía detector con la envolvente (lento). Ahora tiene uno propio, más rápido.
+- **Una cola sostenida seguía oscureciéndose** por el damping. Ahora el sustain y el freeze lo desactivan.
+- **La interpolación de los retardos restaba agudos** en cada vuelta, lo que impedía una cola realmente infinita. Ahora los retardos son de longitud entera cuando el tamaño está quieto y solo se interpolan mientras se mueve.
+- **(Revisión) El damping positivo hacía autooscilar la red**: sumaba agudos por encima de la ganancia de la realimentación y la cola no terminaba nunca. Se normalizó para que ninguna frecuencia supere la ganancia del Release.
+- **(Revisión) El sustain acumulaba demasiado nivel** con señal continua. Ahora solo sostiene cuando la fuente calla.
+- **(Revisión) Reactivar REVERSE soltaba audio antiguo** que se había quedado en su búfer. Ahora el inversor se alimenta siempre.
+- **(Revisión) La latencia se comunicaba al host desde el hilo de audio.** Ahora se hace desde el hilo de mensajes y solo cuando el valor se estabiliza.
+- **(Revisión) El EQ cambiaba de golpe.** Ahora cada cambio se desliza en 20 ms.
+- **(Primera escucha) Clics al arrancar la reproducción y en modo ciclo.** En reproducción continua el motor no produce discontinuidades (medido con señales suaves y con ruido). El problema estaba en el reinicio que pide el host al arrancar o al saltar el ciclo: el plugin cortaba la cola en seco y además borraba unos 17 MB de retardos en el hilo de audio, lo bastante lento como para provocar un corte con búferes pequeños. Ahora el reinicio es instantáneo (los retardos no se borran: lo antiguo simplemente deja de poder leerse) y la cola se funde en 5 ms en vez de cortarse. Confirmado después por escucha: los clics desaparecieron.
+- **Una pista falsa.** Al investigar los clics pareció que cambiar SIZE de golpe producía un estallido de nivel. Era un artefacto de medir con un tono puro (las resonancias de la sala se desplazan); con ruido no hay ni estallido ni clic. Se descartó el arreglo que se había empezado a escribir.
+- **El primer run de CI se canceló** al instante: la etiqueta `macos-14` ya no tenía runner. Se cambió a `macos-latest`.
+
+### 5. Iteración tras la primera escucha
+
+Con el plugin ya instalado y validado en Logic, el autor pidió dos cambios, además de señalar los clics:
+
+- **Poder apagar el LFO**: se añadió el interruptor ON/OFF.
+- **Una envolvente más moldeable**: se añadieron los puntos ATTACK, BENDER y CURVE.
+
+En la segunda escucha el autor confirmó que los clics habían desaparecido y pidió más:
+
+- **Control de densidad**, tanto para hacer la cola más densa como para dejarla en ecos sueltos: el dial DENSITY.
+- **PITCH hasta ±24 semitonos** (antes ±12), tras descubrir el efecto que hace sobre baterías con salas muy cortas.
+- **Puntos de la envolvente totalmente libres.** Se implementó: la cola pasó a dibujarse con cinco puntos libres en tiempo y nivel, cada uno dos parámetros automatizables, sustituyendo a sustain, bender, release y curve.
+
+En la tercera escucha se **deshizo la curva libre** y se volvió a los seis controles (PRE, ATT, SUS, BEND, REL, CURVE). El motivo, en palabras del autor: un control tan extremo de subidas y bajadas resulta demasiado caótico para una reverb, y en colas largas su incidencia real es muy baja. La curva libre sigue en el historial del repositorio (commit `22da42e`) por si se quiere recuperar.
+
+En esa misma escucha se pidió que **la reverb se calle al parar la reproducción**; antes la cola seguía sonando hasta extinguirse. Ahora, al pasar el transporte de reproducción a parado, la cola se vacía con un fundido de 5 ms. La entrada en directo sigue funcionando con el transporte parado.
+
+En esa escucha el autor señaló además que con SIZE por encima de 100 m y sonidos cortos el resultado era confuso, y fijó un principio de diseño: *el pre-delay marca el comienzo de los rebotes, nunca la física. Espacios imposibles, respuestas imposibles.* Hasta entonces la reverb no sonaba hasta que el sonido recorría la línea más corta de la red, lo que a 300 m eran 0,3 s y a 1000 m un segundo entero. Se cambió la toma de salida (64 puntos a lo largo de las líneas, algunos casi al principio) y se hizo crecer la difusión de entrada con el tamaño. Contrapartida: las salas pequeñas también arrancan antes que en versiones anteriores (unos 30 ms antes a 30 m).
+
+**Sobre los clics de aquel bounce** (SIZE 73 m y una caja): el análisis del archivo no mostró discontinuidades y el caso no se pudo reproducir fuera de Logic, así que su origen no llegó a identificarse. Con la versión siguiente (vuelta a los seis controles y nueva toma de salida) el autor confirma que no han vuelto a aparecer. Queda anotado por si reaparecen: no hay una causa demostrada.
+
+### 6. Interfaz
+
+Se presentó una maqueta antes de programar nada, con las condiciones dadas: negro y verde, estética futurista, el nombre arriba a la izquierda y los créditos discretos arriba a la derecha. Aprobada la maqueta, se implementó con primitivas de dibujo de JUCE, sin imágenes. El fondo de la pantalla principal es un corredor en perspectiva cuyo punto de fuga se desplaza con Size y el LFO; el símbolo es un triángulo de Penrose.
+
+## Compilar y probar
+
+### Tests del DSP (Linux o macOS, sin JUCE)
+
+```bash
+cmake -B build -DEI_BUILD_PLUGIN=OFF
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+### Plugin en macOS
+
+Requisitos: Xcode y CMake 3.22 o superior (`brew install cmake`). JUCE se descarga solo.
+
+```bash
+cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake --build build --config Release
+```
+
+Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-Ins/Components/`. También se genera una aplicación autónoma (`Impossible Spaces.app`) para probar sin Logic.
+
+### Integración continua
+
+El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
+
+1. **dsp-tests** (Ubuntu): compila y pasa los 94 tests.
+2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
+
+### Identidad del plugin
+
+| | |
+|---|---|
+| Nombre | Impossible Spaces |
+| Fabricante | VitaPlug (`Vita`) |
+| Código | `Imsp` |
+| Tipo | `aufx` (efecto) |
+| Bundle ID | `com.vitaplug.impossiblespaces` |
+| Entrada / salida | Estéreo → estéreo, o mono → estéreo |
+
+## Validación en Logic: checklist
+
+- [ ] `auval -v aufx Imsp Vita` termina con `AU VALIDATION SUCCEEDED`
+- [ ] Aparece en *Audio Units → VitaPlug → Impossible Spaces* y carga en una pista estéreo
+- [ ] Carga también en una pista mono (como mono → estéreo)
+- [ ] Suena con los valores por defecto
+- [ ] La pantalla muestra la entrada y la reverb moviéndose
+- [ ] Arrastrar PRE, SUS y REL cambia el sonido; doble clic en REL da cola infinita
+- [ ] ATT suaviza la entrada de la reverb; BEND hace crecer o hundirse el sustain; CURVE cambia la forma de la caída
+- [ ] El EQ se oye y la curva corresponde
+- [ ] DENSITY: a 0 % se oyen ecos sueltos, a 100 % la cola es más densa que a 50 %
+- [ ] Al pulsar stop la reverb se calla sin clic
+- [ ] LFO en AUTO y en MANUAL, con los cuatro destinos, y apagado con ON/OFF
+- [ ] REVERSE: suena invertido y la señal seca sigue a tempo
+- [ ] GATE con fuente DRY sobre una caja: la cola se corta
+- [ ] FREEZE mantiene el sonido
+- [ ] Automatizar un parámetro funciona en reproducción
+- [ ] Guardar, cerrar y reabrir el proyecto conserva los ajustes
+- [ ] Un *bounce* offline sale igual que en tiempo real
+- [ ] El consumo de CPU es razonable con varias instancias
+
+## Limitaciones conocidas
+
+- **Al arrancar, al parar y al saltar el ciclo, la cola de la reverb se vacía** (se funde en 5 ms). No continúa de una vuelta del ciclo a la siguiente ni sigue sonando tras el stop.
+- **La envolvente responde más despacio cuanto mayor es SIZE.** La forma de la cola se consigue variando la realimentación, y un cambio tarda una vuelta completa en afectar a todo el sonido almacenado: unos 90 ms a 30 m, unos 300 ms a 100 m. Por eso CURVE en negativo (caída muy rápida al principio) se queda corta respecto a lo dibujado, sobre todo en salas grandes; los valores positivos y el neutro sí se cumplen con precisión.
+- **DENSITY alto con SIZE muy pequeño** puede dar un timbre metálico: es propio de los difusores dentro del bucle.
+- **Por encima del 50 % de DENSITY, el efecto es sutil si DIFFUSION ya está alto**, porque la cola ya nace densa.
+- **El cambio de tono es granular**: con material muy tonal y sostenido puede oírse un ligero trémolo a 60 ms, más evidente cuanto mayor es el salto (a ±24 semitonos es parte del carácter).
+- **Solo 4 de las 16 líneas** llevan cambio de tono, por coste de CPU.
+- **Cambiar WINDOW con el inversor en marcha**: la nueva longitud se aplica al terminar el tramo en curso, y en ese momento puede oírse un clic en la señal seca.
+- **Activar o desactivar REVERSE cambia la latencia** del plugin; Logic puede tardar un instante en recompensar.
+- **Con sustain y golpes muy seguidos** (más juntos que el tiempo de Sustain) la reverb apenas decae entre golpe y golpe y el nivel sube unos dB respecto a un golpe aislado.
+- **El aviso de latencia a Logic** llega con hasta 0,2 s de retraso al activar REVERSE o cambiar la ventana.
+- **En bypass con REVERSE activo** la señal no se retrasa lo que el plugin declara de latencia.
+- **Memoria**: unos 17 MB por instancia a 48 kHz y unos 67 MB a 192 kHz, por los retardos de hasta 3 s.
+- **CPU**: en las pruebas, entre el 3 % y el 7 % de un núcleo según los ajustes; el caso más caro es sala grande, DENSITY al 100 % y LFO activo (medido en Linux). En el Mac del autor una instancia no mueve el medidor; falta probar con muchas a la vez.
+- **Sin presets de fábrica**, sin VST3/AAX, sin entrada de sidechain externa y con ventana de tamaño fijo (1000×640).
+- **Sin firmar ni notarizar**: hace falta el paso de la cuarentena.
+
+## Licencias
+
+- **JUCE 8** se usa bajo su licencia AGPLv3 (o la licencia Starter gratuita de JUCE). Para uso personal no hay problema. Si algún día distribuyes el plugin, tendrás que publicar el código bajo AGPLv3 o adquirir la licencia de JUCE que corresponda. **Este repositorio aún no tiene un archivo de licencia propio**: es una decisión pendiente del autor.
+- **Tipografías** incrustadas, todas bajo SIL Open Font License 1.1 (textos en `plugin/assets/fonts/`): Michroma, Chakra Petch y JetBrains Mono.
