@@ -15,6 +15,7 @@ Reverb en formato **Audio Unit** para **Logic Pro**, basada en espacios que no p
 1. [Qué incluye](#qué-incluye)
 2. [Estado del proyecto](#estado-del-proyecto)
 3. [Instalación en Logic Pro](#instalación-en-logic-pro)
+   - [Instalación en Windows (VST3)](#instalación-en-windows-vst3)
 4. [Guía de uso](#guía-de-uso)
 5. [Recetas](#recetas)
 6. [Cómo funciona por dentro](#cómo-funciona-por-dentro)
@@ -87,6 +88,27 @@ Debe terminar con `AU VALIDATION SUCCEEDED`.
 Abre Logic. Si no aparece: **Logic Pro → Ajustes → Gestor de plug-ins**, busca *Impossible Spaces* y pulsa **Restablecer y volver a explorar la selección**.
 
 Lo encontrarás en una pista de audio o auxiliar, en **Audio FX → Audio Units → VitaPlug → Impossible Spaces**.
+
+## Instalación en Windows (VST3)
+
+Hay una versión **VST3 para Windows x64** (procesadores Intel y AMD), para cualquier DAW compatible con VST3: Reaper, Ableton Live, Cubase, FL Studio, Studio One, Bitwig…
+
+1. **Descargar**: en GitHub, pestaña **Actions** → último run en verde del workflow **build** → *Artifacts* → **ImpossibleSpaces-VST3-Windows-x64**.
+2. **Descomprimir** hasta llegar a la carpeta `Impossible Spaces.vst3`. GitHub mete un zip dentro de otro, así que puede que haya que descomprimir dos veces.
+3. **Copiar** la carpeta `Impossible Spaces.vst3` entera a:
+   ```
+   C:\Program Files\Common Files\VST3\
+   ```
+   Windows pedirá permiso de administrador; es normal.
+4. **Reescanear** los plugins en el DAW. Aparecerá como *VitaPlug → Impossible Spaces*, en la categoría de reverbs.
+
+No hace falta quitar ninguna cuarentena: un VST3 no es un ejecutable, así que Windows no lo bloquea como en macOS.
+
+Limitaciones de esta versión:
+
+- **Solo x64.** No carga en un DAW nativo para ARM (portátiles con Snapdragon).
+- **Sin firmar.** Algunos DAW avisan de plugins de fabricantes desconocidos; se puede aceptar sin problema.
+- **Probada solo por la validación automática** (pluginval) hasta la primera prueba del autor en su portátil.
 
 ## Guía de uso
 
@@ -425,12 +447,24 @@ cmake --build build --config Release
 
 Al terminar, el `.component` se copia automáticamente a `~/Library/Audio/Plug-Ins/Components/`. También se genera una aplicación autónoma (`Impossible Spaces.app`) para probar sin Logic.
 
+### Plugin en Windows
+
+Requisitos: Visual Studio 2022 con la carga de trabajo *Desarrollo para el escritorio con C++*, y CMake 3.22 o superior.
+
+```bash
+cmake -B build -A x64
+cmake --build build --config Release
+```
+
+El VST3 queda en `build/plugin/ImpossibleSpaces_artefacts/Release/VST3/Impossible Spaces.vst3`. No se copia solo a la carpeta de plugins, porque esa carpeta exige permisos de administrador.
+
 ### Integración continua
 
 El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 
 1. **dsp-tests** (Ubuntu): compila y pasa los 94 tests.
 2. **macos-au** (macOS): compila el AU universal (Apple Silicon + Intel), repite los tests, comprueba las arquitecturas, firma ad-hoc, instala, ejecuta `auval -v aufx Imsp Vita` y publica `ImpossibleSpaces-AU.zip` y `ImpossibleSpaces-Standalone.zip`.
+3. **windows-vst3** (Windows): compila el VST3 x64 con Visual Studio, repite los tests, lo valida con [pluginval](https://github.com/Tracktion/pluginval) en nivel de exigencia 5 (carga, procesado con distintas frecuencias de muestreo y tamaños de bloque, estado, parámetros y apertura del editor) y publica `ImpossibleSpaces-VST3-Windows-x64.zip`.
 
 ### Identidad del plugin
 
@@ -439,7 +473,7 @@ El workflow [`build.yml`](.github/workflows/build.yml) se ejecuta en cada push:
 | Nombre | Impossible Spaces |
 | Fabricante | VitaPlug (`Vita`) |
 | Código | `Imsp` |
-| Tipo | `aufx` (efecto) |
+| Tipo | `aufx` (efecto) en AU; *Fx / Reverb* en VST3 |
 | Bundle ID | `com.vitaplug.impossiblespaces` |
 | Entrada / salida | Estéreo → estéreo, o mono → estéreo |
 
