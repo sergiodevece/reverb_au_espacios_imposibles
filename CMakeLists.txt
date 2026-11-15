@@ -15,6 +15,12 @@ else()
 endif()
 option(EI_BUILD_TESTS "Build the DSP tests" ON)
 
+# Visual Studio: read sources as UTF-8 (the UI has a few non-ASCII glyphs) and expose M_PI to the tests.
+if(MSVC)
+  add_compile_options(/utf-8)
+  add_compile_definitions(_USE_MATH_DEFINES NOMINMAX)
+endif()
+
 # ---- DSP: plain C++17, no JUCE ----
 add_library(ei_dsp STATIC
   dsp/Fdn.cpp

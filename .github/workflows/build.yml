@@ -74,3 +74,42 @@ jobs:
         with:
           name: ImpossibleSpaces-Standalone
           path: ImpossibleSpaces-Standalone.zip
+
+  windows-vst3:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (x64)
+        run: cmake -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: DSP tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Locate the VST3
+        shell: bash
+        run: |
+          VST3="build/plugin/ImpossibleSpaces_artefacts/Release/VST3/Impossible Spaces.vst3"
+          test -d "$VST3"
+          find "$VST3" -type f
+          echo "VST3=$VST3" >> "$GITHUB_ENV"
+
+      - name: Validate with pluginval
+        shell: bash
+        run: |
+          curl -sSfL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip
+          7z x -y -opluginval pluginval.zip > /dev/null
+          ./pluginval/pluginval.exe --version
+          ./pluginval/pluginval.exe --strictness-level 5 --timeout-ms 600000 --validate "$VST3"
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path "$env:VST3" -DestinationPath ImpossibleSpaces-VST3-Windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ImpossibleSpaces-VST3-Windows-x64
+          path: ImpossibleSpaces-VST3-Windows-x64.zip

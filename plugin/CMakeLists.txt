@@ -7,9 +7,9 @@ FetchContent_Declare(JUCE
 FetchContent_MakeAvailable(JUCE)
 
 if(APPLE)
-  set(EI_FORMATS AU Standalone)
+  set(EI_FORMATS AU VST3 Standalone)
 else()
-  set(EI_FORMATS Standalone)   # compile check only; the product is the macOS Audio Unit
+  set(EI_FORMATS VST3 Standalone)   # Windows: the VST3 is the product. Linux: compile check.
 endif()
 option(EI_COPY_PLUGIN "Install the built plugin into the user plug-in folder" ${APPLE})
 
@@ -25,6 +25,7 @@ juce_add_plugin(ImpossibleSpaces
   NEEDS_MIDI_OUTPUT FALSE
   IS_MIDI_EFFECT FALSE
   AU_MAIN_TYPE kAudioUnitType_Effect
+  VST3_CATEGORIES Fx Reverb
   COPY_PLUGIN_AFTER_BUILD ${EI_COPY_PLUGIN})
 
 juce_add_binary_data(ImpossibleSpacesAssets SOURCES
