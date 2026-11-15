@@ -8,10 +8,12 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-if(APPLE)
-  option(EI_BUILD_PLUGIN "Build the JUCE plugin (AU + Standalone)" ON)
+# The plugin is built by default where it is shipped: macOS (AU + VST3) and Windows (VST3).
+# On Linux it is only a compile check, so it stays off unless asked for.
+if(APPLE OR WIN32)
+  option(EI_BUILD_PLUGIN "Build the JUCE plugin" ON)
 else()
-  option(EI_BUILD_PLUGIN "Build the JUCE plugin (AU + Standalone)" OFF)
+  option(EI_BUILD_PLUGIN "Build the JUCE plugin" OFF)
 endif()
 option(EI_BUILD_TESTS "Build the DSP tests" ON)
 
